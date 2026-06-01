@@ -37,6 +37,36 @@ import {
 
 const API_BASE = "http://127.0.0.1:8000/api";
 
+const parseAlert = (alertText) => {
+  try {
+    const lines = alertText.split('\n');
+    const timestampLine = lines[0] || "";
+    // Format timestamp [2026-06-01 23:27:39]
+    const tsMatch = timestampLine.match(/\[(.*?)\]/);
+    const timestamp = tsMatch ? tsMatch[1] : "Recent Alert";
+    
+    const subjectLine = lines.find(l => l.includes("SUBJECT:")) || "";
+    const subject = subjectLine.replace("SUBJECT:", "").trim() || "EWS Risk Alert";
+    
+    const studentLine = lines.find(l => l.includes("Student Name:")) || "";
+    const studentName = studentLine.replace("- Student Name:", "").replace("(Grade 3)", "").trim() || "Student";
+    
+    return {
+      timestamp,
+      subject,
+      studentName,
+      content: alertText
+    };
+  } catch (e) {
+    return {
+      timestamp: "Recent",
+      subject: "EWS Risk Alert",
+      studentName: "Student",
+      content: alertText
+    };
+  }
+};
+
 function App() {
   const [users, setUsers] = useState([]);
   const [students, setStudents] = useState([]);
@@ -69,6 +99,10 @@ function App() {
   // Dashboard states
   const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'students', 'scanner'
   const [commentText, setCommentText] = useState("");
+  
+  // Principal Executive EWS Summary Report states
+  const [summaryReport, setSummaryReport] = useState(null);
+  const [selectedAlertEmail, setSelectedAlertEmail] = useState(null);
   
   // EWS Intervention Modal State
   const [showInterventionModal, setShowInterventionModal] = useState(false);
@@ -285,15 +319,17 @@ function App() {
               <UploadCloud className="w-5 h-5" />
               <span>Scan Assessment</span>
             </button>
-            <button 
-              onClick={() => setActiveTab('report')}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'report' ? 'bg-brand-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <ClipboardList className="w-5 h-5" />
-              <span>Principal Report</span>
-            </button>
+            {activeUser && activeUser.role === 'School Principal' && (
+              <button 
+                onClick={() => setActiveTab('report')}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+                  activeTab === 'report' ? 'bg-brand-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <ClipboardList className="w-5 h-5" />
+                <span>Principal Report</span>
+              </button>
+            )}
           </nav>
         </div>
 
@@ -991,6 +1027,113 @@ function App() {
                       {ewsReport.filter(s => s.risk_level === 'Medium').length}
                     </p>
                   </div>
+                </div>
+              </div>
+
+              {/* EWS Simulated Alerts Inbox & Collaborative Feed */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 no-print">
+                
+                {/* Simulated Email Inbox */}
+                <div className="lg:col-span-2 bg-slate-900 border border-slate-850 rounded-2xl p-6 shadow-xl text-slate-100 flex flex-col justify-between min-h-[350px]">
+                  <div>
+                    <div className="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
+                      <div className="flex items-center space-x-2.5">
+                        <span className="relative flex h-2.5 w-2.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-450 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+                        </span>
+                        <h4 className="text-sm font-bold text-white uppercase tracking-wider">📬 EWS High-Priority Notifications</h4>
+                      </div>
+                      <span className="text-[10px] text-rose-400 bg-rose-950/40 border border-rose-900 px-2 py-0.5 rounded font-mono font-bold uppercase">
+                        Secure Logs
+                      </span>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      {summaryReport?.recent_simulated_alerts && summaryReport.recent_simulated_alerts.length > 0 ? (
+                        summaryReport.recent_simulated_alerts.map((alertText, idx) => {
+                          const alert = parseAlert(alertText);
+                          return (
+                            <button
+                              type="button"
+                              key={idx}
+                              onClick={() => setSelectedAlertEmail(alert)}
+                              className="w-full text-left p-3.5 bg-slate-950 hover:bg-slate-850 rounded-xl border border-slate-800 hover:border-brand-500/30 transition-all flex items-start space-x-3 group cursor-pointer"
+                            >
+                              <div className="p-2 bg-rose-950/50 border border-rose-900 text-rose-400 rounded-lg group-hover:bg-rose-900 group-hover:text-white transition-all">
+                                <ShieldAlert className="w-4 h-4" />
+                              </div>
+                              <div className="flex-1 truncate">
+                                <div className="flex justify-between items-baseline mb-1">
+                                  <h5 className="text-xs font-bold text-white truncate group-hover:text-brand-300 transition-all">
+                                    {alert.studentName} flagged as HIGH RISK
+                                  </h5>
+                                  <span className="text-[9px] text-slate-500 font-mono font-medium ml-2">
+                                    {alert.timestamp}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-slate-400 truncate leading-snug">
+                                  {alert.subject}
+                                </p>
+                              </div>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <div className="text-center py-10 bg-slate-950 border border-slate-800 rounded-xl">
+                          <CheckCircle className="w-10 h-10 text-emerald-500 mx-auto mb-2.5" />
+                          <p className="text-xs text-slate-400 font-semibold">No high-priority alerts logged.</p>
+                          <p className="text-[10px] text-slate-600 mt-1">EWS system report is fully clear.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-4 text-center border-t border-slate-800 pt-3">
+                    Logger location: <span className="font-mono text-slate-400 bg-slate-950 px-1 py-0.5 rounded border border-slate-850">backend/ews_alerts.log</span>
+                  </div>
+                </div>
+
+                {/* EWS Collaborative Intervention Feed */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-800 mb-3 uppercase tracking-wider flex items-center">
+                      <Activity className="w-4.5 h-4.5 text-brand-600 mr-2" />
+                      Executive EWS Workspace
+                    </h4>
+                    <p className="text-xs text-slate-500 leading-normal mb-4">
+                      Monitor active intervention status and collaborative tasks triggered by educators.
+                    </p>
+                    
+                    <div className="divide-y divide-slate-100 overflow-y-auto max-h-56 pr-1 space-y-3">
+                      {activities.filter(a => a.activity_type === 'intervention' || a.activity_type === 'ews_alert').slice(0, 4).map((act) => (
+                        <div key={act.id} className="flex items-start space-x-2.5 pt-3 first:pt-0">
+                          <img src={act.avatar_url} alt={act.user_name} className="w-7 h-7 rounded-full bg-slate-100 border border-slate-200" />
+                          <div className="flex-1">
+                            <div className="flex justify-between items-baseline">
+                              <h5 className="text-[11px] font-bold text-slate-700">{act.user_name}</h5>
+                              <span className="text-[9px] text-slate-400 font-mono">
+                                {new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <p className={`text-[11px] mt-0.5 leading-relaxed font-medium ${
+                              act.activity_type === 'ews_alert' ? 'text-rose-600 bg-rose-50/50 p-1.5 rounded border border-rose-100' :
+                              'text-emerald-700 bg-emerald-50/50 p-1.5 rounded border border-emerald-100'
+                            }`}>{act.description}</p>
+                          </div>
+                        </div>
+                      ))}
+                      {activities.filter(a => a.activity_type === 'intervention' || a.activity_type === 'ews_alert').length === 0 && (
+                        <p className="text-xs text-slate-400 text-center py-8">No EWS administrative activities recorded.</p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <button 
+                    onClick={() => setActiveTab('students')}
+                    className="w-full py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all mt-4"
+                  >
+                    View Student Portfolios ➡️
+                  </button>
                 </div>
               </div>
 
