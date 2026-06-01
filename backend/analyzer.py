@@ -4,7 +4,6 @@ import base64
 from PIL import Image
 import io
 
-# We will try importing google.generativeai, but have a fallback mock option
 try:
     import google.generativeai as genai
     HAS_GENAI = True
@@ -19,27 +18,30 @@ if HAS_GENAI and GEMINI_API_KEY:
 def analyze_test_paper(image_bytes, subject="Mathematics", grade="Grade 3"):
     """
     Analyzes a handwritten student test paper using Gemini Multimodal API.
+    Supports mixed Hindi-English (Hinglish/Bilingual) handwriting diagnostics.
     If API key is missing or calls fail, returns high-fidelity mock data.
     """
     
-    # Standard System Prompt for Cognitive Diagnostics
+    # Advanced Bilingual System Prompt for Cognitive Diagnostics
     prompt = f"""
-    You are Nidan AI, a highly specialized educational diagnostic agent focusing on Foundational Literacy & Numeracy (FLN) under India's National Education Policy (NEP 2020).
+    You are ClassPulse AI, a highly specialized educational diagnostic agent focusing on Foundational Literacy & Numeracy (FLN) under India's National Education Policy (NEP 2020).
     Analyze this scanned, handwritten student test paper for {grade} in {subject}.
     
-    Your job is NOT just to grade it. You must perform COGNITIVE ERROR DIAGNOSIS:
-    1. Identify which questions are correct vs. incorrect.
-    2. Determine the EXACT mathematical or grammatical misconception (e.g., "carrying over confusion in 2-digit addition", "borrowing across zero confusion", "phoneme-to-grapheme reading slip").
-    3. Generate a structured JSON response containing:
-       - student_name: (str, guess from paper or 'Unknown Student')
+    Your job is to read and analyze the handwritten responses, which may be written in a mix of Hindi and English (Bilingual/Hinglish):
+    1. Look for the student's name and roll number written at the top of the paper.
+    2. Identify correct vs. incorrect answers, taking into account handwritten ticks (✔) or crosses (✘).
+    3. Perform COGNITIVE ERROR DIAGNOSIS:
+       - Explain the EXACT conceptual misconception (e.g. "forgets tens carryover in addition", "subtracts smaller digit from larger in ones column", "phonetic spelling slips like writing 'pat' instead of 'path'").
+    4. Generate a structured JSON response containing:
+       - student_name: (str, extract from paper if readable, e.g. 'Rahul Kumar', else 'Unknown Student')
        - roll_number: (str, if written, else null)
        - total_score: (float, out of 10)
-       - summary: (str, general performance overview)
+       - summary: (str, performance overview written in simple English)
        - gaps: array of objects, where each object has:
-         - concept: (str, e.g., 'Double-digit Addition with Carry', 'Place Value')
+         - concept: (str, e.g. 'Double-digit Addition with Carry', 'Word Sound Recognition')
          - status: ('Mastered', 'Needs Improvement', 'Critical Gap')
-         - misconception_details: (str, explanation of why they made this mistake)
-         - remedial_resource: (str, a link to a suggested open-source learning resource or practical class activity)
+         - misconception_details: (str, detailed diagnostic explanation of why they made this specific mistake)
+         - remedial_resource: (str, a helpful activity description or a link to a suggested DIKSHA module)
          
     Response MUST be strict valid JSON only, without markdown wrappers.
     """
@@ -47,14 +49,10 @@ def analyze_test_paper(image_bytes, subject="Mathematics", grade="Grade 3"):
     # Try using Gemini API if configured
     if HAS_GENAI and GEMINI_API_KEY:
         try:
-            # Load the image
             image = Image.open(io.BytesIO(image_bytes))
-            
-            # Use gemini-1.5-flash for speed and multimodal capability
             model = genai.GenerativeModel("gemini-1.5-flash")
             response = model.generate_content([prompt, image])
             
-            # Clean response text and parse JSON
             response_text = response.text.strip()
             if response_text.startswith("```json"):
                 response_text = response_text[7:]
@@ -68,57 +66,57 @@ def analyze_test_paper(image_bytes, subject="Mathematics", grade="Grade 3"):
         except Exception as e:
             print(f"Gemini API analysis failed: {e}. Falling back to high-fidelity mock diagnostic.")
             
-    # Premium Mock Diagnostic Fallback (Perfect for seamless demos)
+    # Premium Mock Diagnostic Fallback (Seamless demo)
     return get_premium_mock_diagnostic(subject, grade)
 
 def get_premium_mock_diagnostic(subject, grade):
     """
-    Generates extremely realistic, customized diagnostic data for standard FLN worksheets.
+    Generates extremely realistic, bilingual-ready diagnostic data.
     """
     if subject.lower() == "mathematics":
         return {
             "student_name": "Rahul Kumar",
             "roll_number": "G3-01",
-            "total_score": 6.5,
-            "summary": "Rahul shows strong basic arithmetic skills but struggles when operations require transitioning between place values (e.g., carrying over or borrowing across zeros).",
+            "total_score": 5.5,
+            "summary": "Rahul show strong understanding of place values in basic numbers but struggles with transitioning values (carry-overs and borrowings across zeros) during calculations.",
             "gaps": [
                 {
                     "concept": "Single-digit Addition",
                     "status": "Mastered",
-                    "misconception_details": "Successfully adds single-digit numbers with 100% accuracy.",
-                    "remedial_resource": "https://diksha.gov.in/resources/play-based-addition-games"
+                    "misconception_details": "Rahul accurately adds single-digit numbers with 100% accuracy (e.g. 8 + 5 = 13).",
+                    "remedial_resource": "https://diksha.gov.in/play-based/single-addition"
                 },
                 {
                     "concept": "Double-digit Addition with Carry",
                     "status": "Needs Improvement",
-                    "misconception_details": "Rahul understands the column setup but forgets to add the 'carried over' digit to the tens column, resulting in answers like 28 + 15 = 33 instead of 43.",
-                    "remedial_resource": "https://diksha.gov.in/resources/place-value-bundle-carryover"
+                    "misconception_details": "Rahul column setup is correct, but he forgets to add the 'carried over' ten to the tens column (e.g. writing 29 + 15 = 34 instead of 44).",
+                    "remedial_resource": "https://diksha.gov.in/resources/place-value-carryover"
                 },
                 {
-                    "concept": "Subtraction Across Zero",
+                    "concept": "Subtraction Borrowing Across Zero",
                     "status": "Critical Gap",
-                    "misconception_details": "Major conceptual block. When subtracting from a number ending in zero (e.g., 50 - 27), Rahul simply subtracts the smaller digit from the larger digit in the ones column (e.g., 7 - 0 = 7), resulting in 50 - 27 = 37.",
+                    "misconception_details": "When subtracting from a number ending in zero (e.g. 60 - 28), Rahul simply subtracts the smaller digit from the larger digit in the ones column (8 - 0 = 8), resulting in 60 - 28 = 48.",
                     "remedial_resource": "https://diksha.gov.in/play-based/zero-borrowing-beads-activity"
                 }
             ]
         }
-    else:  # English or Reading Fluency
+    else:  # English / Literacy
         return {
             "student_name": "Ananya Rao",
             "roll_number": "G3-02",
             "total_score": 7.0,
-            "summary": "Ananya has excellent sight-word recognition but struggles with phonemic blending of unfamiliar multi-syllabic words.",
+            "summary": "Ananya has excellent sight-word recognition but struggles with phonemic blending of unfamiliar multi-syllabic English words.",
             "gaps": [
                 {
-                    "concept": "Sight Words",
+                    "concept": "Sight Word Recognition",
                     "status": "Mastered",
-                    "misconception_details": "Correctly pronounces and identifies all standard grade-3 sight words.",
+                    "misconception_details": "Correctly reads and pronounces grade-level English sight words.",
                     "remedial_resource": "https://diksha.gov.in/resources/sight-words-grade3"
                 },
                 {
-                    "concept": "Phonemic Blending",
+                    "concept": "Consonant Blend Sounding",
                     "status": "Needs Improvement",
-                    "misconception_details": "Struggles to blend consonant-vowel-consonant (CVC) segments in longer words (e.g., pronouncing 'str-e-tch' as 'streetch').",
+                    "misconception_details": "Ananya struggles to blend adjacent consonant segments (e.g., pronouncing 'brush' as 'bush' or 'str-e-tch' as 'streetch').",
                     "remedial_resource": "https://diksha.gov.in/resources/phonics-blending-modules"
                 }
             ]
