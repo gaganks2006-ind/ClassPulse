@@ -378,6 +378,7 @@ def get_ews_report():
         avg_score = sum(sc['total_score'] for sc in scores) / len(scores) if scores else 0.0
         s_dict['recent_avg_score'] = round(avg_score, 1)
         s_dict['assessment_count'] = len(scores)
+        s_dict['last_3_scores'] = [sc['total_score'] for sc in scores]
         
         if s['risk_level'] == 'High':
             total_high_risk += 1
