@@ -6,6 +6,9 @@ echo     (FastAPI Backend + React/Vite Frontend)
 echo ===================================================
 echo.
 
+:: Add Node.js to PATH environment for this session
+set PATH=%PATH%;C:\Program Files\nodejs
+
 echo [1/4] Checking Python backend environment...
 cd backend
 if exist .venv\Scripts\activate.bat goto install_deps
