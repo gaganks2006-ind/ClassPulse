@@ -18,6 +18,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+ALERTS_LOG_PATH = os.path.join(os.path.dirname(__file__), "ews_alerts.log")
+
 # Automatically initialize database on start
 @app.on_event("startup")
 def startup_event():
@@ -39,6 +41,7 @@ def get_users():
 @app.get("/api/students")
 def get_students():
     conn = get_db_connection()
+    # Sort so High Risk students appear first for EWS radar priority
     students = conn.execute("SELECT * FROM students ORDER BY CASE risk_level WHEN 'High' THEN 1 WHEN 'Medium' THEN 2 ELSE 3 END").fetchall()
     
     result = []
@@ -97,7 +100,7 @@ def get_student_detail(student_id: int):
         "comments": [dict(c) for c in comments]
     }
 
-# 4. Upload & Analyze Assessment Sheet + Calculate EWS Risk in Real-time
+# 4. Upload & Analyze Assessment Sheet + Calculate EWS Risk in Real-time + Simulate Email Alert
 @app.post("/api/scan")
 async def scan_assessment(
     subject: str = Form(...),
@@ -122,10 +125,10 @@ async def scan_assessment(
             raise HTTPException(status_code=404, detail="Selected student does not exist")
             
         student_data = dict(student)
+        score = diagnostic.get("total_score", 0.0)
         
         # 1. Insert into assessments
         cursor = conn.cursor()
-        score = diagnostic.get("total_score", 0.0)
         cursor.execute("""
             INSERT INTO assessments (student_id, subject, assessment_date, scanned_by_user_id, total_score, summary)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -153,9 +156,9 @@ async def scan_assessment(
                 gap.get("remedial_resource", "")
             ))
             
-        # 3. Dynamic Early Warning Risk Engine
-        # Algorithm: If score < 5.0 and attendance < 80% -> High Risk
-        # If score < 6.0 and attendance < 85% -> Medium Risk
+        # 3. Dynamic EWS Risk Engine
+        # Algorithm: Score < 5.5 and attendance < 80% -> High Risk
+        # Score < 7.0 and attendance < 85% -> Medium Risk
         # Else -> Low Risk
         attendance = student_data.get("attendance_rate", 95.0)
         new_risk = "Low"
@@ -166,7 +169,6 @@ async def scan_assessment(
         elif score >= 7.5:
             new_risk = "Low"
         else:
-            # Fallback to keep existing if unchanged
             new_risk = student_data.get("risk_level", "Low")
             
         cursor.execute("UPDATE students SET risk_level = ? WHERE id = ?", (new_risk, student_id))
@@ -184,16 +186,36 @@ async def scan_assessment(
             f"{user_name} scanned and analyzed {subject} paper for {student['name']}. Score: {score}/10. Real-time EWS Dropout Risk calculated as '{new_risk}'."
         ))
         
-        # Trigger EWS Alert if High Risk
+        # 5. EWS Simulated Email Alerts Logger (Chirag's Feature)
         if new_risk == "High":
+            description = f"🚨 EARLY WARNING SYSTEM ALERT: {student['name']} is flagged as HIGH DROPOUT RISK. Attendance: {attendance}%, Diagnostic Score: {score}/10."
             cursor.execute("""
                 INSERT INTO team_activity (user_id, student_id, activity_type, description)
                 VALUES (?, ?, 'ews_alert', ?)
             """, (
                 scanned_by_user_id,
                 student_id,
-                f"🚨 EARLY WARNING SYSTEM ALERT: {student['name']} is flagged as HIGH DROPOUT RISK. Attendance: {attendance}%, Diagnostic Score: {score}/10."
+                description
             ))
+            
+            # Write to simulated ews_alerts.log
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            alert_log_entry = (
+                f"[{timestamp}] HIGH-PRIORITY EMAIL NOTIFICATION\n"
+                f"FROM: ClassPulse EWS Engine <alerts@classpulse.org>\n"
+                f"TO: Principal Vikram Singh <vikram@shiksha.org>, Special Educator Meera Nair <meera@shiksha.org>\n"
+                f"SUBJECT: [URGENT] School Dropout Threat Detected for Student: {student['name']}\n"
+                f"DIAGNOSTIC METRICS:\n"
+                f" - Student Name: {student['name']} (Grade 3)\n"
+                f" - Attendance Rate: {attendance}%\n"
+                f" - Recent Math Diagnostic Score: {score}/10\n"
+                f" - Misconceptions Flagged: Subtraction Borrowing Across Zero\n"
+                f"RECOMMENDED INTERVENTION: Immediate Parent Consultation & 1-on-1 Special Tutoring session.\n"
+                f"--------------------------------------------------------------------------------\n\n"
+            )
+            with open(ALERTS_LOG_PATH, "a", encoding="utf-8") as f:
+                f.write(alert_log_entry)
+            print(f"EWS Simulated email alert logged successfully for {student['name']}.")
             
         conn.commit()
         
@@ -209,7 +231,7 @@ async def scan_assessment(
     finally:
         conn.close()
 
-# 5. Fetch class-level analytics (with EWS Risk distributions)
+# 5. Fetch class-level analytics
 @app.get("/api/analytics")
 def get_analytics():
     conn = get_db_connection()
@@ -250,7 +272,7 @@ def get_analytics():
         "ews_risks": {r['risk_level']: r['count'] for r in risk_counts}
     }
 
-# 6. Fetch team activities / comments / EWS alerts
+# 6. Fetch team activities / comments
 @app.get("/api/activity")
 def get_activities():
     conn = get_db_connection()
@@ -265,7 +287,7 @@ def get_activities():
     conn.close()
     return [dict(a) for a in activities]
 
-# 7. Add collaborative comment / assign task
+# 7. Add collaborative comment
 @app.post("/api/comments")
 def add_comment(
     user_id: int,
@@ -296,7 +318,7 @@ def add_comment(
     conn.close()
     return {"success": True}
 
-# 8. EWS Trigger Intervention Action (New EWS Collaborative Endpoint)
+# 8. EWS Trigger Intervention Action
 @app.post("/api/ews/intervene")
 def trigger_intervention(
     user_id: int,
@@ -331,3 +353,55 @@ def trigger_intervention(
     conn.commit()
     conn.close()
     return {"success": True, "description": description}
+
+# 9. Principal Executive EWS Risk Reporter Endpoint (Chirag's Feature)
+@app.get("/api/ews/report")
+def get_ews_report():
+    conn = get_db_connection()
+    
+    # Total students and risk ratios
+    students = conn.execute("SELECT id, name, roll_number, attendance_rate, risk_level FROM students").fetchall()
+    
+    report_list = []
+    total_high_risk = 0
+    total_medium_risk = 0
+    
+    for s in students:
+        s_dict = dict(s)
+        # Calculate recent average score from last 3 assessments
+        scores = conn.execute("""
+            SELECT total_score FROM assessments 
+            WHERE student_id = ? 
+            ORDER BY assessment_date DESC LIMIT 3
+        """, (s['id'],)).fetchall()
+        
+        avg_score = sum(sc['total_score'] for sc in scores) / len(scores) if scores else 0.0
+        s_dict['recent_avg_score'] = round(avg_score, 1)
+        s_dict['assessment_count'] = len(scores)
+        
+        if s['risk_level'] == 'High':
+            total_high_risk += 1
+        elif s['risk_level'] == 'Medium':
+            total_medium_risk += 1
+            
+        report_list.append(s_dict)
+        
+    # Load recent simulated alerts from the local text file (if exists)
+    recent_simulated_alerts = []
+    if os.path.exists(ALERTS_LOG_PATH):
+        with open(ALERTS_LOG_PATH, "r", encoding="utf-8") as f:
+            content = f.read().strip()
+            # Split by border separator
+            recent_simulated_alerts = [alert.strip() for alert in content.split("--------------------------------------------------------------------------------") if alert.strip()]
+            
+    conn.close()
+    
+    return {
+        "report_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "total_enrolled": len(students),
+        "high_risk_count": total_high_risk,
+        "medium_risk_count": total_medium_risk,
+        "school_risk_index": round(((total_high_risk * 1.0 + total_medium_risk * 0.5) / len(students)) * 100, 1) if students else 0.0,
+        "students": report_list,
+        "recent_simulated_alerts": recent_simulated_alerts[-5:] # Return last 5 alerts
+    }
