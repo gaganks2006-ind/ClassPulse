@@ -20,7 +20,9 @@ import {
   Calendar,
   PhoneCall,
   Home,
-  UserCheck
+  UserCheck,
+  ClipboardList,
+  Printer
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -43,6 +45,26 @@ function App() {
   const [studentDetail, setStudentDetail] = useState(null);
   const [analytics, setAnalytics] = useState({ concept_gaps: [], subject_performances: [], ews_risks: { Low: 0, Medium: 0, High: 0 } });
   const [activities, setActivities] = useState([]);
+  const [ewsReport, setEwsReport] = useState([]);
+  
+  // Sorting states for Principal Report
+  const [sortKey, setSortKey] = useState('name');
+  const [sortOrder, setSortOrder] = useState('asc');
+
+  const getAverageScore = (scores) => {
+    if (!scores || scores.length === 0) return 0;
+    const sum = scores.reduce((acc, curr) => acc + curr, 0);
+    return sum / scores.length;
+  };
+
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortOrder('asc');
+    }
+  };
   
   // Dashboard states
   const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'students', 'scanner'
@@ -104,6 +126,11 @@ function App() {
       const activitiesRes = await fetch(`${API_BASE}/activity`);
       const activitiesData = await activitiesRes.json();
       setActivities(activitiesData);
+
+      // 5. Fetch EWS Principal Report
+      const reportRes = await fetch(`${API_BASE}/ews/report`);
+      const reportData = await reportRes.json();
+      setEwsReport(reportData);
     } catch (e) {
       console.error("Failed to fetch initial data, check API connection.", e);
     }
@@ -258,6 +285,15 @@ function App() {
               <UploadCloud className="w-5 h-5" />
               <span>Scan Assessment</span>
             </button>
+            <button 
+              onClick={() => setActiveTab('report')}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'report' ? 'bg-brand-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <ClipboardList className="w-5 h-5" />
+              <span>Principal Report</span>
+            </button>
           </nav>
         </div>
 
@@ -311,6 +347,7 @@ function App() {
               {activeTab === 'dashboard' && "Unified Analytics & Dropout Early Warning"}
               {activeTab === 'students' && "Diagnostic Student Portfolios"}
               {activeTab === 'scanner' && "ClassPulse Multimodal Scanner"}
+              {activeTab === 'report' && "School Risk Report — Principal View"}
             </h2>
             <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-600 flex items-center border border-slate-200">
               Grade 3 • Section A
@@ -562,7 +599,14 @@ function App() {
                           Attendance: <strong>{studentDetail.student.attendance_rate}%</strong> • ID: {studentDetail.student.roll_number}
                         </p>
                       </div>
-                      <div className="mt-4 md:mt-0 flex space-x-2">
+                      <div className="mt-4 md:mt-0 flex space-x-2 no-print">
+                        <button 
+                          onClick={() => window.print()}
+                          className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center"
+                        >
+                          <Printer className="w-4 h-4 mr-1.5" />
+                          Print Diagnostic Report
+                        </button>
                         <button 
                           onClick={() => {
                             setScanStudentId(studentDetail.student.id.toString());
@@ -630,6 +674,63 @@ function App() {
                           </div>
                         )}
                       </div>
+                    </div>
+
+                    {/* DIKSHA Learning Hub Section */}
+                    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                      <div className="flex justify-between items-center mb-4">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-[10px] uppercase font-bold text-brand-600 bg-brand-50 border border-brand-100 px-2 py-0.5 rounded tracking-wide">
+                            Remedial Pathway
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center">
+                        <Award className="w-4.5 h-4.5 text-brand-600 mr-2" />
+                        🎓 NEP-Aligned DIKSHA Learning Hub
+                      </h4>
+
+                      {studentDetail.gaps.filter(g => g.remedial_resource).length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {studentDetail.gaps.filter(g => g.remedial_resource).map((gap) => (
+                            <div key={gap.id} className="p-4 rounded-xl border border-slate-200 bg-brand-50/20 hover:bg-brand-50/30 transition-all flex flex-col justify-between space-y-3">
+                              <div>
+                                <div className="flex justify-between items-center">
+                                  <h5 className="text-xs font-extrabold text-slate-800 flex items-center">
+                                    <BookOpen className="w-3.5 h-3.5 mr-1.5 text-brand-600" />
+                                    {gap.concept}
+                                  </h5>
+                                  <span className={`text-[9px] font-bold px-2 py-0.2 rounded border ${
+                                    gap.status === 'Critical Gap' ? 'bg-rose-50 border-rose-200 text-rose-700' :
+                                    gap.status === 'Needs Improvement' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                                    'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                  }`}>
+                                    {gap.status}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">
+                                  Access custom remedial exercises and explanations specifically tailored to resolve the diagnosed learning gaps.
+                                </p>
+                              </div>
+                              
+                              <a 
+                                href={gap.remedial_resource} 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="w-full py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-[10px] font-bold shadow-sm transition-all flex items-center justify-center no-print"
+                              >
+                                Open in DIKSHA Hub ➡️
+                              </a>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-6 text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center justify-center space-x-2">
+                          <CheckCircle className="w-5 h-5 text-emerald-600" />
+                          <p className="text-xs font-bold">All concepts are mastered or stable. No active learning hub actions required!</p>
+                        </div>
+                      )}
                     </div>
 
                     {/* Shared Diagnostic Log & Peer Collaborative Discussion */}
@@ -832,6 +933,189 @@ function App() {
                 </div>
               )}
 
+            </div>
+          )}
+
+          {/* TAB 4: SCHOOL RISK REPORT - PRINCIPAL VIEW */}
+          {activeTab === 'report' && (
+            <div className="space-y-6">
+              {/* Summary Metrics Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 no-print">
+                {/* Card 1: Total Students */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex items-center space-x-4">
+                  <div className="p-3 bg-brand-50 rounded-xl text-brand-600">
+                    <Users className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Students</h4>
+                    <p className="text-2xl font-black text-slate-800 mt-1">{ewsReport.length}</p>
+                  </div>
+                </div>
+
+                {/* Card 2: Average Attendance */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex items-center space-x-4">
+                  <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600">
+                    <Calendar className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Avg Attendance</h4>
+                    <p className="text-2xl font-black text-slate-800 mt-1">
+                      {ewsReport.length > 0 
+                        ? (ewsReport.reduce((acc, s) => acc + s.attendance_rate, 0) / ewsReport.length).toFixed(1)
+                        : "0.0"}%
+                    </p>
+                  </div>
+                </div>
+
+                {/* Card 3: High Risk Students */}
+                <div className="bg-rose-50/50 border border-rose-100 rounded-2xl p-5 shadow-sm flex items-center space-x-4">
+                  <div className="p-3 bg-rose-100 rounded-xl text-rose-600">
+                    <ShieldAlert className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-rose-500 uppercase tracking-wider">High Risk</h4>
+                    <p className="text-2xl font-black text-rose-800 mt-1">
+                      {ewsReport.filter(s => s.risk_level === 'High').length}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Card 4: Medium Risk Students */}
+                <div className="bg-amber-50/50 border border-amber-100 rounded-2xl p-5 shadow-sm flex items-center space-x-4">
+                  <div className="p-3 bg-amber-100 rounded-xl text-amber-600">
+                    <AlertTriangle className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-amber-600 uppercase tracking-wider">Medium Risk</h4>
+                    <p className="text-2xl font-black text-amber-800 mt-1">
+                      {ewsReport.filter(s => s.risk_level === 'Medium').length}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Report Table Card */}
+              <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center no-print">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Dropout Early Warning & Foundational Registry</h3>
+                    <p className="text-xs text-slate-400 font-medium">Real-time academic summaries mapped to individual warning indices</p>
+                  </div>
+                  <button 
+                    onClick={() => window.print()}
+                    className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center"
+                  >
+                    <Printer className="w-4 h-4 mr-1.5" />
+                    Print Summary Report
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">
+                        <th onClick={() => handleSort('name')} className="p-4 cursor-pointer hover:bg-slate-100 transition-colors select-none">
+                          Student Name {sortKey === 'name' ? (sortOrder === 'asc' ? '▲' : '▼') : ''}
+                        </th>
+                        <th className="p-4">Roll No</th>
+                        <th className="p-4">Grade & Section</th>
+                        <th onClick={() => handleSort('attendance_rate')} className="p-4 cursor-pointer hover:bg-slate-100 transition-colors select-none">
+                          Attendance Rate {sortKey === 'attendance_rate' ? (sortOrder === 'asc' ? '▲' : '▼') : ''}
+                        </th>
+                        <th onClick={() => handleSort('risk_level')} className="p-4 cursor-pointer hover:bg-slate-100 transition-colors select-none">
+                          EWS Risk Level {sortKey === 'risk_level' ? (sortOrder === 'asc' ? '▲' : '▼') : ''}
+                        </th>
+                        <th className="p-4">Last 3 Scores</th>
+                        <th onClick={() => handleSort('average_score')} className="p-4 cursor-pointer hover:bg-slate-100 transition-colors select-none">
+                          Average Score {sortKey === 'average_score' ? (sortOrder === 'asc' ? '▲' : '▼') : ''}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 text-xs">
+                      {[...ewsReport].sort((a, b) => {
+                        let valA, valB;
+                        if (sortKey === 'name') {
+                          valA = a.name.toLowerCase();
+                          valB = b.name.toLowerCase();
+                        } else if (sortKey === 'attendance_rate') {
+                          valA = a.attendance_rate;
+                          valB = b.attendance_rate;
+                        } else if (sortKey === 'risk_level') {
+                          const riskMap = { High: 3, Medium: 2, Low: 1 };
+                          valA = riskMap[a.risk_level] || 0;
+                          valB = riskMap[b.risk_level] || 0;
+                        } else if (sortKey === 'average_score') {
+                          valA = getAverageScore(a.last_3_scores);
+                          valB = getAverageScore(b.last_3_scores);
+                        } else {
+                          valA = a[sortKey];
+                          valB = b[sortKey];
+                        }
+
+                        if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+                        if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+                        return 0;
+                      }).map((student) => {
+                        const avgScore = getAverageScore(student.last_3_scores);
+                        return (
+                          <tr 
+                            key={student.student_id} 
+                            className={`hover:bg-slate-50/50 transition-colors ${
+                              student.risk_level === 'High' ? 'bg-rose-50/10' :
+                              student.risk_level === 'Medium' ? 'bg-amber-50/10' :
+                              'bg-emerald-50/10'
+                            }`}
+                          >
+                            <td className="p-4 font-bold text-slate-800">{student.name}</td>
+                            <td className="p-4 font-mono text-slate-500">{student.roll_number}</td>
+                            <td className="p-4">{student.grade} • Section {student.section}</td>
+                            <td className="p-4 font-semibold">
+                              <span className={student.attendance_rate < 80 ? 'text-rose-600' : student.attendance_rate < 85 ? 'text-amber-600' : 'text-emerald-600'}>
+                                {student.attendance_rate}%
+                              </span>
+                            </td>
+                            <td className="p-4">
+                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                                student.risk_level === 'High' ? 'bg-rose-50 border-rose-200 text-rose-700' :
+                                student.risk_level === 'Medium' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                                'bg-emerald-50 border-emerald-200 text-emerald-700'
+                              }`}>
+                                {student.risk_level}
+                              </span>
+                            </td>
+                            <td className="p-4">
+                              <div className="flex space-x-1">
+                                {student.last_3_scores && student.last_3_scores.length > 0 ? (
+                                  student.last_3_scores.map((score, i) => (
+                                    <span key={i} className={`px-1.5 py-0.5 rounded font-mono text-[10px] ${
+                                      score >= 7.5 ? 'bg-emerald-100 text-emerald-800' :
+                                      score >= 5.5 ? 'bg-amber-100 text-amber-800' :
+                                      'bg-rose-100 text-rose-800'
+                                    }`}>
+                                      {score.toFixed(1)}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-slate-400">-</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-4 font-bold font-mono">
+                              {student.last_3_scores && student.last_3_scores.length > 0 ? (
+                                <span className={avgScore >= 7.5 ? 'text-emerald-600' : avgScore >= 5.5 ? 'text-amber-600' : 'text-rose-600'}>
+                                  {avgScore.toFixed(1)}/10
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">-</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
 

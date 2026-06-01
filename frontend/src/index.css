@@ -6,3 +6,45 @@ body {
   background-color: #f8fafc;
   color: #0f172a;
 }
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  body, html, #root, main, .flex-1, .overflow-y-auto {
+    background: #fff !important;
+    color: #000 !important;
+    overflow: visible !important;
+    height: auto !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  /* Reset layout constraints for printing */
+  .grid {
+    display: block !important;
+  }
+  
+  .lg\:col-span-2 {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  .bg-slate-50, .bg-slate-100, .bg-slate-200, .bg-slate-50\/50 {
+    background-color: #fff !important;
+  }
+  
+  .border, .border-slate-200, .border-slate-100 {
+    border-color: #ddd !important;
+  }
+  
+  /* Ensure backgrounds and colors are printed exactly as designed */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
