@@ -81,6 +81,11 @@ function App() {
   const [sortKey, setSortKey] = useState('name');
   const [sortOrder, setSortOrder] = useState('asc');
 
+  // Modal and Interactive Hub States
+  const [showWorksheetModal, setShowWorksheetModal] = useState(false);
+  const [showDikshaHub, setShowDikshaHub] = useState(false);
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+
   const getAverageScore = (scores) => {
     if (!scores || scores.length === 0) return 0;
     const sum = scores.reduce((acc, curr) => acc + curr, 0);
@@ -333,43 +338,61 @@ function App() {
           </nav>
         </div>
 
-        {/* 5-Member Team Collaboration Widget */}
-        <div className="p-4 m-4 bg-slate-950 rounded-xl border border-slate-800">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-semibold text-slate-400 tracking-wider uppercase flex items-center">
-              <Activity className="w-3.5 h-3.5 text-green-400 mr-1.5 animate-pulse" />
-              Team Hub
-            </h3>
-            <span className="text-[10px] text-brand-400 bg-brand-950/50 border border-brand-900 px-1.5 py-0.5 rounded font-mono">
-              5 Connected
-            </span>
-          </div>
-          
-          <div className="space-y-2">
-            {users.map((user) => (
-              <button
-                key={user.id}
-                onClick={() => setActiveUser(user)}
-                className={`w-full flex items-center justify-between p-1.5 rounded-lg text-left transition-all ${
-                  activeUser?.id === user.id 
-                    ? 'bg-slate-800 ring-1 ring-brand-500 text-white' 
-                    : 'hover:bg-slate-800 text-slate-400 hover:text-slate-300'
-                }`}
-              >
-                <div className="flex items-center space-x-2">
-                  <img src={user.avatar_url} alt={user.name} className="w-6 h-6 rounded-full bg-slate-700" />
-                  <div className="truncate">
-                    <p className="text-xs font-medium truncate leading-tight">{user.name}</p>
-                    <p className="text-[9px] text-slate-500 leading-none">{user.role}</p>
+        {/* 5-Member Team Collaboration Widget Refactored to Premium User Switcher Dropdown */}
+        <div className="relative p-4 m-4 bg-slate-950 rounded-xl border border-slate-800 no-print">
+          {showProfileDropdown && (
+            <div className="absolute bottom-full left-0 right-0 mb-2 bg-slate-900 border border-slate-800 rounded-xl p-2 shadow-2xl space-y-1 z-30 animate-scale-up">
+              <div className="px-2 py-1.5 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                Switch Active Collaborator
+              </div>
+              {users.filter(u => u.id !== activeUser?.id).map((user) => (
+                <button
+                  key={user.id}
+                  onClick={() => {
+                    setActiveUser(user);
+                    setShowProfileDropdown(false);
+                  }}
+                  className="w-full flex items-center justify-between p-2 rounded-lg text-left hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-all duration-150 cursor-pointer"
+                >
+                  <div className="flex items-center space-x-2.5 truncate">
+                    <img src={user.avatar_url} alt={user.name} className="w-6.5 h-6.5 rounded-full bg-slate-850" />
+                    <div className="truncate">
+                      <p className="text-xs font-bold truncate leading-tight">{user.name}</p>
+                      <p className="text-[9px] text-slate-500 leading-none">{user.role}</p>
+                    </div>
                   </div>
-                </div>
-                <span className={`w-2 h-2 rounded-full ${user.status === 'Active' ? 'bg-green-400 shadow-lg shadow-green-500/50' : 'bg-slate-600'}`} />
-              </button>
-            ))}
-          </div>
-          <div className="mt-3 pt-2.5 border-t border-slate-800 text-[10px] text-slate-500 text-center">
-            Active Developer: <strong className="text-slate-300">{activeUser?.name}</strong>
-          </div>
+                  <span className={`w-1.5 h-1.5 rounded-full ${user.status === 'Active' ? 'bg-green-400' : 'bg-slate-600'}`} />
+                </button>
+              ))}
+            </div>
+          )}
+
+          <button
+            onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+            className="w-full flex items-center justify-between p-1.5 rounded-lg text-left transition-all duration-200 hover:bg-slate-900/60 group cursor-pointer"
+          >
+            <div className="flex items-center space-x-3 truncate">
+              {activeUser && (
+                <>
+                  <div className="relative">
+                    <img src={activeUser.avatar_url} alt={activeUser.name} className="w-8 h-8 rounded-full bg-slate-800 ring-2 ring-brand-500/30" />
+                    <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-450 border-2 border-slate-950 rounded-full shadow-md animate-pulse" />
+                  </div>
+                  <div className="truncate">
+                    <p className="text-xs font-extrabold text-white truncate leading-tight group-hover:text-brand-400 transition-colors">
+                      {activeUser.name}
+                    </p>
+                    <p className="text-[9px] text-slate-400 leading-none font-medium mt-0.5">{activeUser.role}</p>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="text-slate-500 group-hover:text-slate-350 transition-colors ml-2">
+              <svg className={`w-4 h-4 transition-transform duration-200 ${showProfileDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </button>
         </div>
       </aside>
 
