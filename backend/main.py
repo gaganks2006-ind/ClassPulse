@@ -331,3 +331,47 @@ def trigger_intervention(
     conn.commit()
     conn.close()
     return {"success": True, "description": description}
+
+
+# 9. GET /api/ews/report - Principal School Risk Report
+@app.get("/api/ews/report")
+def get_ews_report():
+    conn = get_db_connection()
+    try:
+        students = conn.execute("""
+            SELECT id, name, roll_number, grade, section, attendance_rate, risk_level 
+            FROM students 
+            ORDER BY name ASC
+        """).fetchall()
+        
+        report = []
+        for s in students:
+            s_id = s['id']
+            # Get last 3 assessment scores (total_score) ordered by date descending
+            scores_rows = conn.execute("""
+                SELECT total_score 
+                FROM assessments 
+                WHERE student_id = ? 
+                ORDER BY assessment_date DESC 
+                LIMIT 3
+            """, (s_id,)).fetchall()
+            
+            last_scores = [row['total_score'] for row in scores_rows]
+            
+            report.append({
+                "student_id": s_id,
+                "name": s['name'],
+                "roll_number": s['roll_number'],
+                "grade": s['grade'],
+                "section": s['section'],
+                "attendance_rate": s['attendance_rate'],
+                "risk_level": s['risk_level'],
+                "last_3_scores": last_scores
+            })
+            
+        return report
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
