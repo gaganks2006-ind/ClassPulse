@@ -356,53 +356,70 @@ def trigger_intervention(
 
 # 9. Principal Executive EWS Risk Reporter Endpoint (Chirag's Feature)
 @app.get("/api/ews/report")
-def get_ews_report():
+def get_ews_report(summary: bool = False):
     conn = get_db_connection()
-    
-    # Total students and risk ratios
-    students = conn.execute("SELECT id, name, roll_number, attendance_rate, risk_level FROM students").fetchall()
-    
-    report_list = []
-    total_high_risk = 0
-    total_medium_risk = 0
-    
-    for s in students:
-        s_dict = dict(s)
-        # Calculate recent average score from last 3 assessments
-        scores = conn.execute("""
-            SELECT total_score FROM assessments 
-            WHERE student_id = ? 
-            ORDER BY assessment_date DESC LIMIT 3
-        """, (s['id'],)).fetchall()
+    try:
+        # Total students and risk ratios, including grade and section
+        students = conn.execute("SELECT id, name, roll_number, grade, section, attendance_rate, risk_level FROM students ORDER BY name ASC").fetchall()
         
-        avg_score = sum(sc['total_score'] for sc in scores) / len(scores) if scores else 0.0
-        s_dict['recent_avg_score'] = round(avg_score, 1)
-        s_dict['assessment_count'] = len(scores)
-        s_dict['last_3_scores'] = [sc['total_score'] for sc in scores]
+        report_list = []
+        total_high_risk = 0
+        total_medium_risk = 0
         
-        if s['risk_level'] == 'High':
-            total_high_risk += 1
-        elif s['risk_level'] == 'Medium':
-            total_medium_risk += 1
+        for s in students:
+            # Calculate recent average score from last 3 assessments
+            scores = conn.execute("""
+                SELECT total_score FROM assessments 
+                WHERE student_id = ? 
+                ORDER BY assessment_date DESC LIMIT 3
+            """, (s['id'],)).fetchall()
             
-        report_list.append(s_dict)
-        
-    # Load recent simulated alerts from the local text file (if exists)
-    recent_simulated_alerts = []
-    if os.path.exists(ALERTS_LOG_PATH):
-        with open(ALERTS_LOG_PATH, "r", encoding="utf-8") as f:
-            content = f.read().strip()
-            # Split by border separator
-            recent_simulated_alerts = [alert.strip() for alert in content.split("--------------------------------------------------------------------------------") if alert.strip()]
+            avg_score = sum(sc['total_score'] for sc in scores) / len(scores) if scores else 0.0
+            last_scores = [sc['total_score'] for sc in scores]
             
-    conn.close()
-    
-    return {
-        "report_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "total_enrolled": len(students),
-        "high_risk_count": total_high_risk,
-        "medium_risk_count": total_medium_risk,
-        "school_risk_index": round(((total_high_risk * 1.0 + total_medium_risk * 0.5) / len(students)) * 100, 1) if students else 0.0,
-        "students": report_list,
-        "recent_simulated_alerts": recent_simulated_alerts[-5:] # Return last 5 alerts
-    }
+            # Map both id and student_id keys for compatibility with both features
+            s_dict = {
+                "student_id": s['id'],
+                "id": s['id'],
+                "name": s['name'],
+                "roll_number": s['roll_number'],
+                "grade": s['grade'],
+                "section": s['section'],
+                "attendance_rate": s['attendance_rate'],
+                "risk_level": s['risk_level'],
+                "recent_avg_score": round(avg_score, 1),
+                "assessment_count": len(scores),
+                "last_3_scores": last_scores
+            }
+            
+            if s['risk_level'] == 'High':
+                total_high_risk += 1
+            elif s['risk_level'] == 'Medium':
+                total_medium_risk += 1
+                
+            report_list.append(s_dict)
+            
+        if not summary:
+            return report_list
+            
+        # Load recent simulated alerts from the local text file (if exists)
+        recent_simulated_alerts = []
+        if os.path.exists(ALERTS_LOG_PATH):
+            with open(ALERTS_LOG_PATH, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                # Split by border separator
+                recent_simulated_alerts = [alert.strip() for alert in content.split("--------------------------------------------------------------------------------") if alert.strip()]
+                
+        return {
+            "report_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "total_enrolled": len(students),
+            "high_risk_count": total_high_risk,
+            "medium_risk_count": total_medium_risk,
+            "school_risk_index": round(((total_high_risk * 1.0 + total_medium_risk * 0.5) / len(students)) * 100, 1) if students else 0.0,
+            "students": report_list,
+            "recent_simulated_alerts": recent_simulated_alerts[-5:] # Return last 5 alerts
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()

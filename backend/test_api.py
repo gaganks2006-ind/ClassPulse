@@ -48,5 +48,32 @@ def test_get_ews_report():
         
     print("\nSUCCESS: All endpoint schema assertions passed!")
 
+def test_get_ews_report_summary():
+    response = client.get("/api/ews/report?summary=true")
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+    data = response.json()
+    
+    assert isinstance(data, dict), "Response should be a dict when summary=true"
+    assert "report_date" in data, "Missing report_date in summary"
+    assert "total_enrolled" in data, "Missing total_enrolled in summary"
+    assert "high_risk_count" in data, "Missing high_risk_count in summary"
+    assert "medium_risk_count" in data, "Missing medium_risk_count in summary"
+    assert "school_risk_index" in data, "Missing school_risk_index in summary"
+    assert "students" in data, "Missing students in summary"
+    assert "recent_simulated_alerts" in data, "Missing recent_simulated_alerts in summary"
+    
+    assert isinstance(data["students"], list), "students should be a list"
+    assert isinstance(data["recent_simulated_alerts"], list), "recent_simulated_alerts should be a list"
+    
+    print("Summary Report Response Data (first student truncated for length):")
+    import json
+    if data["students"]:
+        print(json.dumps({**data, "students": data["students"][:1]}, indent=2))
+    else:
+        print(json.dumps(data, indent=2))
+        
+    print("\nSUCCESS: Summary endpoint schema assertions passed!")
+
 if __name__ == "__main__":
     test_get_ews_report()
+    test_get_ews_report_summary()
