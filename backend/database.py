@@ -1,12 +1,123 @@
 import sqlite3
 import os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "nidan.db")
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+if DATABASE_URL:
+    try:
+        import psycopg2
+        from psycopg2.extras import DictCursor
+    except ImportError:
+        pass
+
+def translate_sqlite_to_pg(query):
+    if not query:
+        return query
+    
+    # Handle single string query or standard query translation
+    q = str(query).strip()
+    
+    # Translate SQLite specific CREATE TABLE queries
+    q = q.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
+    q = q.replace("DATETIME DEFAULT CURRENT_TIMESTAMP", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+    q = q.replace("DATETIME", "TIMESTAMP")
+    
+    # Replace INSERT OR IGNORE syntax with PostgreSQL conflict handlers
+    if "INSERT OR IGNORE INTO student_badges" in q:
+        q = q.replace("INSERT OR IGNORE INTO student_badges", "INSERT INTO student_badges")
+        if "ON CONFLICT" not in q:
+            q += " ON CONFLICT (student_id, badge_name) DO NOTHING"
+    elif "INSERT OR IGNORE INTO attendance_records" in q:
+        q = q.replace("INSERT OR IGNORE INTO attendance_records", "INSERT INTO attendance_records")
+        if "ON CONFLICT" not in q:
+            q += " ON CONFLICT (student_id, date) DO NOTHING"
+    elif "INSERT OR IGNORE" in q:
+        q = q.replace("INSERT OR IGNORE", "INSERT")
+        
+    return q
+
+class PostgresCursorWrapper:
+    def __init__(self, pg_cursor):
+        self.pg_cursor = pg_cursor
+        self.lastrowid = None
+
+    def execute(self, query, params=None):
+        converted_query = translate_sqlite_to_pg(query)
+        converted_query = converted_query.replace("?", "%s")
+        
+        is_insert = converted_query.strip().upper().startswith("INSERT")
+        has_returning = "RETURNING" in converted_query.strip().upper()
+        
+        if is_insert and not has_returning:
+            # Safely append RETURNING id
+            converted_query += " RETURNING id"
+            
+        if params is None:
+            self.pg_cursor.execute(converted_query)
+        else:
+            if not isinstance(params, (tuple, list)):
+                params = (params,)
+            self.pg_cursor.execute(converted_query, params)
+            
+        if is_insert and not has_returning:
+            try:
+                row = self.pg_cursor.fetchone()
+                if row:
+                    self.lastrowid = row[0]
+            except Exception:
+                pass
+        return self
+
+    def executemany(self, query, params_list):
+        converted_query = translate_sqlite_to_pg(query)
+        converted_query = converted_query.replace("?", "%s")
+        self.pg_cursor.executemany(converted_query, params_list)
+        return self
+
+    def fetchone(self):
+        return self.pg_cursor.fetchone()
+
+    def fetchall(self):
+        return self.pg_cursor.fetchall()
+
+    def __iter__(self):
+        return iter(self.pg_cursor)
+
+    @property
+    def rowcount(self):
+        return self.pg_cursor.rowcount
+
+class PostgresConnectionWrapper:
+    def __init__(self, pg_conn):
+        self.pg_conn = pg_conn
+
+    def cursor(self):
+        return PostgresCursorWrapper(self.pg_conn.cursor(cursor_factory=DictCursor))
+
+    def execute(self, query, params=None):
+        cursor = self.cursor()
+        cursor.execute(query, params)
+        return cursor
+
+    def commit(self):
+        self.pg_conn.commit()
+
+    def close(self):
+        self.pg_conn.close()
 
 def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    if DATABASE_URL:
+        # Standardize connection string for Render/Railway which might use postgres:// instead of postgresql://
+        url = DATABASE_URL
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+        pg_conn = psycopg2.connect(url)
+        return PostgresConnectionWrapper(pg_conn)
+    else:
+        DB_PATH = os.path.join(os.path.dirname(__file__), "nidan.db")
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        return conn
 
 def init_db():
     conn = get_db_connection()

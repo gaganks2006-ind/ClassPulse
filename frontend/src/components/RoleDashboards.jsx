@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import AttendanceLogger from './AttendanceLogger';
 import { 
   Users, 
@@ -223,6 +223,9 @@ export function ClassTeacherDashboard({
   const alarms = myStudents.filter(s => s.risk_level === 'High' || s.risk_level === 'Medium');
   const avgAttendance = myStudents.length > 0 ? (myStudents.reduce((acc, s) => acc + s.attendance_rate, 0) / myStudents.length).toFixed(1) : "95.0";
 
+  const [showWhatsappDrawer, setShowWhatsappDrawer] = useState(false);
+  const [whatsappStudent, setWhatsappStudent] = useState(null);
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="bg-gradient-to-br from-indigo-950 to-indigo-900 text-white rounded-3xl p-6 shadow-xl relative overflow-hidden">
@@ -320,17 +323,27 @@ export function ClassTeacherDashboard({
                     setInterventionStudent(student);
                     setShowInterventionModal(true);
                   }}
-                  className="flex-1 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-[10px] font-bold shadow-sm transition-all flex items-center justify-center cursor-pointer"
+                  className="flex-1 py-2 bg-brand-650 hover:bg-brand-700 text-white rounded-lg text-[10px] font-bold shadow-sm transition-all flex items-center justify-center cursor-pointer"
                 >
-                  <ShieldAlert className="w-3.5 h-3.5 mr-1.5" />
+                  <ShieldAlert className="w-3.5 h-3.5 mr-1" />
                   Support Plan
+                </button>
+                <button
+                  onClick={() => {
+                    setWhatsappStudent(student);
+                    setShowWhatsappDrawer(true);
+                  }}
+                  className="py-2 px-2.5 bg-emerald-605 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold shadow-sm transition-all flex items-center justify-center cursor-pointer"
+                  title="Preview WhatsApp Warning message"
+                >
+                  📱 Preview Alert
                 </button>
                 <button
                   onClick={() => {
                     setEscalationStudent(student);
                     setShowEscalationModal(true);
                   }}
-                  className="py-2 px-3 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-bold shadow-sm transition-all flex items-center justify-center cursor-pointer"
+                  className="py-2 px-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-bold shadow-sm transition-all flex items-center justify-center cursor-pointer"
                 >
                   Escalate
                 </button>
@@ -401,6 +414,80 @@ export function ClassTeacherDashboard({
           </div>
         </div>
       </div>
+
+      {/* WhatsApp parent alert Mockup Drawer Overlay */}
+      {showWhatsappDrawer && whatsappStudent && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-end animate-fade-in">
+          <div className="bg-[#f0f2f5] w-full max-w-sm h-full flex flex-col shadow-2xl relative overflow-hidden animate-slide-left">
+            {/* Header: WhatsApp Green Bar */}
+            <div className="bg-emerald-800 text-white px-4 py-4 flex items-center justify-between shadow-md">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-full bg-slate-100 border border-emerald-700 overflow-hidden flex items-center justify-center font-bold text-emerald-800 text-lg">
+                  💬
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold leading-none">ClassPulse Parent Alert</h4>
+                  <span className="text-[10px] text-emerald-200">Online • Dispatch Simulator</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setShowWhatsappDrawer(false); setWhatsappStudent(null); }}
+                className="text-white/80 hover:text-white text-sm font-black p-2 cursor-pointer border-none bg-transparent"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Chat Area: Mock Screen */}
+            <div className="flex-1 bg-[#efeae2] p-4 overflow-y-auto space-y-4 font-sans relative">
+              <div className="text-center my-2">
+                <span className="bg-slate-200/80 text-slate-600 text-[8px] font-bold px-2 py-0.5 rounded-md tracking-wide uppercase">
+                  Today
+                </span>
+              </div>
+
+              {/* Chat Bubble from Teacher */}
+              <div className="max-w-[85%] bg-white border border-slate-100 rounded-2xl rounded-tl-none p-3.5 shadow-md space-y-1.5 self-start text-xs text-slate-800 relative">
+                <div className="flex justify-between items-baseline border-b border-slate-150 pb-1 mb-1 text-[8px] font-extrabold text-emerald-800 tracking-wider">
+                  <span>PARENT WARNING DRAFT</span>
+                  <span>10:14 AM</span>
+                </div>
+                <p className="leading-relaxed">
+                  {whatsappStudent.risk_level === 'High' ? (
+                    <>
+                      Dear Parent, Class Teacher <strong>{activeUser.name}</strong> has logged an attendance warning alert for <strong>{whatsappStudent.name}</strong>. Attendance rate has dropped to <strong>{whatsappStudent.attendance_rate}%</strong>, crossing below the critical EWS threshold. Please prioritize regular school attendance.
+                    </>
+                  ) : (
+                    <>
+                      Hi there! Quick classroom update from <strong>{activeUser.name}</strong>. {whatsappStudent.name} is doing well, but has been borderline with attendance recently (currently <strong>{whatsappStudent.attendance_rate}%</strong>). Let's collaborate to ensure regular daily learning!
+                    </>
+                  )}
+                </p>
+                <div className="flex justify-end text-[8px] text-slate-400 font-mono mt-0.5">
+                  ✓✓ Delivered
+                </div>
+              </div>
+            </div>
+
+            {/* Action Bar */}
+            <div className="p-4 bg-white border-t border-slate-150 space-y-3">
+              <p className="text-[10px] text-slate-500 font-bold text-center">
+                This WhatsApp notification draft is automatically compiled based on the child's dynamic EWS risk level.
+              </p>
+              <button
+                onClick={() => {
+                  alert(`📱 Parent alert dispatch triggered via API for ${whatsappStudent.name}!`);
+                  setShowWhatsappDrawer(false);
+                  setWhatsappStudent(null);
+                }}
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black shadow-lg shadow-emerald-200 transition-all flex items-center justify-center space-x-2 cursor-pointer border-none"
+              >
+                <span>🚀 Dispatch WhatsApp Alert</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

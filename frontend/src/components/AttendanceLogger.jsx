@@ -26,6 +26,8 @@ export default function AttendanceLogger({ activeUser, students, API_BASE, onAtt
 
   const [date, setDate] = useState(getTodayString());
   const [records, setRecords] = useState({}); // student_id -> 'Present' or 'Absent'
+  const [historyMap, setHistoryMap] = useState({}); // student_id -> attendance_trend
+  const [absenceReasons, setAbsenceReasons] = useState({}); // student_id -> absence_reason
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState(null); // { type: 'success' | 'error', text: '' }
@@ -56,6 +58,23 @@ export default function AttendanceLogger({ activeUser, students, API_BASE, onAtt
     
     prevStudentsRef.current = students;
   }, [students]);
+
+  // Load 5-day attendance history trend from EWS analytics endpoint
+  const fetchHistory = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/analytics/attendance-ews?grade=Grade 3&section=${section}`);
+      if (res.ok) {
+        const data = await res.json();
+        const map = {};
+        data.forEach(s => {
+          map[s.student_id] = s.attendance_trend || [];
+        });
+        setHistoryMap(map);
+      }
+    } catch (err) {
+      console.error("Failed to load attendance history", err);
+    }
+  };
 
   // Load attendance records for the selected date
   const loadAttendance = async () => {
@@ -89,6 +108,7 @@ export default function AttendanceLogger({ activeUser, students, API_BASE, onAtt
 
   useEffect(() => {
     loadAttendance();
+    fetchHistory();
   }, [date, students.length]);
 
   const toggleStatus = (studentId) => {
@@ -135,6 +155,26 @@ export default function AttendanceLogger({ activeUser, students, API_BASE, onAtt
         const totalCount = myStudents.length;
         const presentCount = Object.values(records).filter(status => status === 'Present').length;
         const absentCount = totalCount - presentCount;
+
+        // Post qualitative comments for any student marked absent with a reason selected
+        const reasonComments = Object.entries(absenceReasons)
+          .filter(([id, reason]) => {
+            const status = records[id] || records[parseInt(id)];
+            return status === 'Absent' && reason;
+          })
+          .map(([id, reason]) => {
+            const sName = myStudents.find(s => s.id === parseInt(id))?.name || "Student";
+            return fetch(`${API_BASE}/comments?user_id=${activeUser.id}&student_id=${id}&comment_text=${encodeURIComponent(`Absence Reason: ${reason} (Logged during daily attendance review for ${sName})`)}`, {
+              method: 'POST'
+            });
+          });
+
+        if (reasonComments.length > 0) {
+          await Promise.all(reasonComments);
+        }
+        
+        // Refresh the 5-day visual checklist
+        await fetchHistory();
 
         setMessage({
           type: 'success',
@@ -257,23 +297,74 @@ export default function AttendanceLogger({ activeUser, students, API_BASE, onAtt
                   key={student.id}
                   className={`p-3.5 rounded-2xl border flex items-center justify-between transition-all duration-300 ${
                     isPresent 
-                      ? 'bg-slate-50/50 border-slate-150 hover:border-emerald-200' 
-                      : 'bg-rose-50/40 border-rose-100 hover:border-rose-200'
+                      ? 'bg-slate-50/50 border-slate-150 hover:border-emerald-250' 
+                      : 'bg-rose-50/40 border-rose-150 hover:border-rose-250'
                   }`}
                 >
-                  <div className="flex flex-col">
+                  <div className="flex flex-col flex-grow">
                     <span className="text-xs font-bold text-slate-800">{student.name}</span>
                     <span className="text-[10px] font-mono text-slate-400 mt-0.5">Roll ID: {student.roll_number}</span>
+                    
+                    {/* Absence Reason Dropdown */}
+                    {!isPresent && (
+                      <select
+                        value={absenceReasons[student.id] || ""}
+                        onChange={(e) => setAbsenceReasons({ ...absenceReasons, [student.id]: e.target.value })}
+                        className="mt-2 text-[9px] px-2 py-1 bg-white border border-rose-250 text-rose-800 rounded-lg outline-none font-extrabold focus:ring-1 focus:ring-rose-500 max-w-[170px]"
+                      >
+                        <option value="">❓ Select Absence Reason...</option>
+                        <option value="Sick Leave 🤒">🤒 Sick Leave (Health)</option>
+                        <option value="Family Outing 🏡">🏡 Family Outing (Leave)</option>
+                        <option value="Unexcused Absence 🚫">🚫 Unexcused (No notice)</option>
+                        <option value="Heavy Rain/Weather 🌧️">🌧️ Weather (Heavy Rain)</option>
+                        <option value="No Transportation 🚌">🚌 Transit (No ride)</option>
+                      </select>
+                    )}
                   </div>
 
-                  <div className="flex items-center space-x-1.5">
+                  {/* 5-Day Visual Calendar Strip */}
+                  <div className="flex flex-col items-center mr-4">
+                    <span className="text-[8px] text-slate-400 font-bold uppercase tracking-wider mb-1">Recent 5 Days</span>
+                    <div className="flex space-x-1">
+                      {historyMap[student.id] && historyMap[student.id].length > 0 ? (
+                        historyMap[student.id].slice(-5).map((h, i) => {
+                          const isHPresent = h.status === 'Present';
+                          return (
+                            <span 
+                              key={i}
+                              title={`${h.date}: ${h.status}`}
+                              className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7px] font-extrabold border ${
+                                isHPresent
+                                  ? 'bg-emerald-100 border-emerald-250 text-emerald-800'
+                                  : 'bg-rose-100 border-rose-250 text-rose-800'
+                              }`}
+                            >
+                              {isHPresent ? 'P' : 'A'}
+                            </span>
+                          );
+                        })
+                      ) : (
+                        [...Array(5)].map((_, i) => (
+                          <span 
+                            key={i} 
+                            className="w-3.5 h-3.5 rounded-full border border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-[6px] text-slate-400"
+                            title="No record synced"
+                          >
+                            -
+                          </span>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-1.5 flex-shrink-0">
                     <button
                       type="button"
                       onClick={() => toggleStatus(student.id)}
-                      className={`px-3 py-1.5 rounded-xl text-[10px] font-extrabold flex items-center space-x-1 transition-all ${
+                      className={`px-3 py-1.5 rounded-xl text-[10px] font-extrabold flex items-center space-x-1 transition-all cursor-pointer ${
                         isPresent
-                          ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-200'
-                          : 'bg-rose-500 hover:bg-rose-600 text-white shadow-md shadow-rose-200'
+                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-100'
+                          : 'bg-rose-600 hover:bg-rose-700 text-white shadow-md shadow-rose-100'
                       }`}
                     >
                       {isPresent ? (

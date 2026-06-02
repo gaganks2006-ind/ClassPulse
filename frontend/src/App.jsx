@@ -224,6 +224,29 @@ function App() {
     }
   }, [selectedStudent]);
 
+  // Pre-fill intervention modal notes dynamically based on student risk level
+  useEffect(() => {
+    if (interventionStudent) {
+      const isHigh = interventionStudent.risk_level === 'High';
+      setInterventionType(isHigh ? "Home Visit" : "Parent Phone Call");
+      setInterventionNotes(
+        isHigh 
+          ? `Urgent: student ${interventionStudent.name}'s attendance has dropped to ${interventionStudent.attendance_rate}%, crossing below the critical EWS threshold. Home visit recommended to counsel parents and align remedial goals.`
+          : `Scheduled check-in phone call with ${interventionStudent.name}'s parents to discuss minor attendance regression (currently ${interventionStudent.attendance_rate}%).`
+      );
+    }
+  }, [interventionStudent]);
+
+  // Pre-fill principal escalation reason dynamically based on student risk level
+  useEffect(() => {
+    if (escalationStudent) {
+      setEscalationPriority(escalationStudent.risk_level === 'High' ? "Critical" : "High");
+      setEscalationReason(
+        `Class Teacher ${activeUser?.name || 'Aarav Sharma'} flagging student ${escalationStudent.name} (Grade ${escalationStudent.grade}-${escalationStudent.section}, Roll: ${escalationStudent.roll_number}) to the School Principal. Overall attendance has dropped to ${escalationStudent.attendance_rate}%, and EWS risk is active. Requesting official administrative outreach.`
+      );
+    }
+  }, [escalationStudent, activeUser]);
+
   const fetchInitialData = async () => {
     try {
       // 1. Fetch Collaborating Users
