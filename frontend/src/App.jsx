@@ -118,7 +118,6 @@ function App() {
   const [isSubmittingIntervention, setIsSubmittingIntervention] = useState(false);
 
   // Worksheet and DIKSHA Modal States
-  const [showWorksheetModal, setShowWorksheetModal] = useState(false);
   const [activeWorksheetData, setActiveWorksheetData] = useState(null);
   
   const [showDikshaModal, setShowDikshaModal] = useState(false);
