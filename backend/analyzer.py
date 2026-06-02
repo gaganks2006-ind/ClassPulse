@@ -27,7 +27,24 @@ def analyze_test_paper(image_bytes, subject="Mathematics", grade="Grade 3"):
     You are ClassPulse AI, an easy-to-use school helper that finds learning gaps in student exam papers.
     Analyze this scanned, handwritten student test paper for {grade} in {subject}.
     
-    Read the handwritten answers, which may be in a mix of Hindi and English (bilingual Hinglish):
+    HANDWRITING PARSING GUIDELINES:
+    - Papers may be photocopied, creased, or have low contrast. Try extra hard to read faint marks.
+    - Hindi-English bilingual: student names often in Devanagari, answers may mix Hindi numbers.
+    - Distinguish ambiguous digits: differentiate "1" from "7", "6" from "0", "5" from "S".
+    - Blank or unattempted questions should be scored as 0, not skipped.
+    - If answers are in a printed grid/table, read row-by-row, column-by-column.
+
+    SCORING RUBRIC (out of 10):
+    - Each correct answer = proportional marks (e.g., 5 questions = 2 marks each).
+    - Partial credit: if the method is correct but the final answer is wrong, award 50% marks.
+    - Completely blank/wrong = 0 marks for that question.
+
+    CONFIDENCE SCORING:
+    - If the handwriting is very unclear, set ai_confidence_score below 60.
+    - If the paper is partially visible (cropped/cut), set ai_confidence_score below 50.
+    - If you are highly confident in all answers, set ai_confidence_score above 85.
+
+    Read the handwritten answers:
     1. Find the student's name and roll number written on the paper.
     2. Identify correct vs. incorrect answers, checking for handwritten ticks (✔) or crosses (✘).
     3. Find the EXACT mistakes or conceptual gaps (for example: "forgets carryover in double-digit addition", "subtracts smaller number from bigger number in column", "spelling mistakes").
@@ -43,7 +60,7 @@ def analyze_test_paper(image_bytes, subject="Mathematics", grade="Grade 3"):
          - status: ('Mastered', 'Needs Improvement', 'Critical Gap')
          - misconception_details: (str, very simple, clear explanation of their mistake without using academic jargon, so parents and teachers understand immediately)
          - remedial_resource: (str, a simple play-based help activity description)
-          
+           
     Response must be strict valid JSON only, without markdown wrappers.
     Use very simple, friendly English in all explanations. Keep sentences short and clear.
     """
@@ -78,6 +95,13 @@ def transcribe_and_extract_voice_observation(audio_bytes, mime_type="audio/webm"
     """
     prompt = """
     You are ClassPulse AI, a friendly helper that transcribes and extracts student help details from teacher audio.
+    
+    VOICE OBSERVATION GUIDELINES:
+    - Teacher may speak in Hindi, English, or Hinglish. Extract information regardless of language.
+    - Names may be pronounced differently from their written form. Match phonetically.
+    - If the teacher mentions a score, extract the exact numeric value.
+    - If multiple students are discussed, create separate gap entries for each.
+
     Listen to the audio recording of the teacher speaking about a student.
     Please do two tasks:
     1. Transcribe the spoken observations word-for-word.
