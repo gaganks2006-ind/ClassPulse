@@ -23,30 +23,29 @@ def analyze_test_paper(image_bytes, subject="Mathematics", grade="Grade 3"):
     If API key is missing or calls fail, returns high-fidelity mock data.
     """
     
-    # Advanced Bilingual System Prompt for Cognitive Diagnostics
     prompt = f"""
-    You are ClassPulse AI, a highly specialized educational diagnostic agent focusing on Foundational Literacy & Numeracy (FLN) under India's National Education Policy (NEP 2020).
+    You are ClassPulse AI, an easy-to-use school helper that finds learning gaps in student exam papers.
     Analyze this scanned, handwritten student test paper for {grade} in {subject}.
     
-    Your job is to read and analyze the handwritten responses, which may be written in a mix of Hindi and English (Bilingual/Hinglish):
-    1. Look for the student's name and roll number written at the top of the paper.
-    2. Identify correct vs. incorrect answers, taking into account handwritten ticks (✔) or crosses (✘).
-    3. Perform COGNITIVE ERROR DIAGNOSIS:
-       - Explain the EXACT conceptual misconception (e.g. "forgets tens carryover in addition", "subtracts smaller digit from larger in ones column", "phonetic spelling slips like writing 'pat' instead of 'path'").
-    4. Generate a structured JSON response containing:
-       - student_name: (str, extract from paper if readable, e.g. 'Rahul Kumar', else 'Unknown Student')
+    Read the handwritten answers, which may be in a mix of Hindi and English (bilingual Hinglish):
+    1. Find the student's name and roll number written on the paper.
+    2. Identify correct vs. incorrect answers, checking for handwritten ticks (✔) or crosses (✘).
+    3. Find the EXACT mistakes or conceptual gaps (for example: "forgets carryover in double-digit addition", "subtracts smaller number from bigger number in column", "spelling mistakes").
+    4. Return a structured JSON response containing:
+       - student_name: (str, extract from paper if readable, else 'Unknown Student')
        - roll_number: (str, if written, else null)
        - total_score: (float, out of 10)
-       - summary: (str, performance overview written in simple English)
-       - ai_confidence_score: (float, a number from 0 to 100 representing how confident you are in this diagnosis based on handwriting legibility and clarity)
-       - remediation_plan: (str, a short generated 3-step personalized weekly plan to help the student overcome their identified gaps)
+       - summary: (str, simple performance overview in very plain, easy-to-understand English)
+       - ai_confidence_score: (float, 0 to 100 representing how confident you are in this diagnosis)
+       - remediation_plan: (str, a simple 3-step practice plan in basic English to help the student overcome their mistakes)
        - gaps: array of objects, where each object has:
-         - concept: (str, e.g. 'Double-digit Addition with Carry', 'Word Sound Recognition')
+         - concept: (str, e.g. 'Addition with Carryover', 'Spelling Word Sounds')
          - status: ('Mastered', 'Needs Improvement', 'Critical Gap')
-         - misconception_details: (str, detailed diagnostic explanation of why they made this specific mistake)
-         - remedial_resource: (str, a helpful activity description or a link to a suggested DIKSHA module)
+         - misconception_details: (str, very simple, clear explanation of their mistake without using academic jargon, so parents and teachers understand immediately)
+         - remedial_resource: (str, a simple play-based help activity description)
           
-    Response MUST be strict valid JSON only, without markdown wrappers.
+    Response must be strict valid JSON only, without markdown wrappers.
+    Use very simple, friendly English in all explanations. Keep sentences short and clear.
     """
     
     # Try using Gemini API if configured
@@ -78,21 +77,22 @@ def transcribe_and_extract_voice_observation(audio_bytes, mime_type="audio/webm"
     If API key is missing or fails, falls back to a smart offline NLP text observation parser.
     """
     prompt = """
-    You are ClassPulse AI, an expert educational diagnostic agent.
-    You are listening to an audio recording of a teacher speaking about their observations of a student.
-    Please perform two tasks:
+    You are ClassPulse AI, a friendly helper that transcribes and extracts student help details from teacher audio.
+    Listen to the audio recording of the teacher speaking about a student.
+    Please do two tasks:
     1. Transcribe the spoken observations word-for-word.
-    2. Extract structured diagnostic information from the spoken observations:
+    2. Extract structured information from the spoken observations:
        - student_name: (str, e.g. 'Rahul Kumar')
        - subject: (str, e.g. 'Mathematics', 'English', 'Science', 'Environmental Studies (EVS)')
        - total_score: (float, out of 10)
-       - summary: (str, overview of the observation)
+       - summary: (str, simple overview of the observation in very plain English)
        - gaps: list of objects containing:
-         - concept: (str)
+         - concept: (str, e.g. 'Addition with Carryover')
          - status: ('Mastered', 'Needs Improvement', 'Critical Gap')
-         - misconception_details: (str)
-         - remedial_resource: (str)
+         - misconception_details: (str, very simple, clear explanation of the mistake so everyone understands easily)
+         - remedial_resource: (str, simple activity to help them)
     Response MUST be valid JSON only, with the keys: 'transcription', 'student_name', 'subject', 'total_score', 'summary', 'gaps', 'ai_confidence_score', 'remediation_plan'.
+    Use very simple, direct English in all descriptions. Keep statements short and clear.
     """
     
     if HAS_GENAI and GEMINI_API_KEY:

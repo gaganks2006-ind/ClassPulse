@@ -747,7 +747,7 @@ function App() {
       <div className={`flex h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 overflow-hidden text-slate-800 ${showWorksheetModal ? 'no-print' : ''}`}>
       
       {/* 1. Sidebar Navigation */}
-      <aside className="w-64 bg-indigo-950/90 backdrop-blur-2xl text-slate-300 flex flex-col justify-between shadow-2xl border-r border-indigo-900/50 print:hidden z-20">
+      <aside className="hidden md:flex w-64 bg-indigo-950/90 backdrop-blur-2xl text-slate-300 flex-col justify-between shadow-2xl border-r border-indigo-900/50 print:hidden z-20">
         <div>
           {/* Logo */}
           <div className="p-6 flex items-center space-x-3 bg-slate-950">
@@ -769,7 +769,7 @@ function App() {
               }`}
             >
               <TrendingUp className="w-5 h-5" />
-              <span>Class Analytics & EWS</span>
+              <span>Dashboard</span>
             </button>
             <button 
               onClick={() => setActiveTab('students')}
@@ -787,7 +787,7 @@ function App() {
               }`}
             >
               <UploadCloud className="w-5 h-5" />
-              <span>Scan Assessment</span>
+              <span>Scan Exam Paper</span>
             </button>
             {activeUser && activeUser.role === 'School Principal' && (
               <button 
@@ -797,7 +797,7 @@ function App() {
                 }`}
               >
                 <ClipboardList className="w-5 h-5" />
-                <span>Principal Report</span>
+                <span>Student Dropout Report</span>
               </button>
             )}
             <button 
@@ -807,7 +807,7 @@ function App() {
               }`}
             >
               <BarChart3 className="w-5 h-5" />
-              <span>Analytics Hub</span>
+              <span>Class Performance Trends</span>
             </button>
           </nav>
         </div>
@@ -874,18 +874,28 @@ function App() {
       <main className="flex-1 flex flex-col overflow-hidden relative">
         
         {/* Top Header */}
-        <header className="h-16 bg-white/70 backdrop-blur-xl border-b border-indigo-100/50 px-8 flex items-center justify-between shadow-[0_4px_30px_rgba(0,0,0,0.03)] z-10 sticky top-0">
-          <div className="flex items-center space-x-3">
-            <h2 className="text-lg font-bold text-slate-800 capitalize flex items-center">
-              {activeTab === 'dashboard' && "Unified Analytics & Dropout Early Warning"}
-              {activeTab === 'students' && "Diagnostic Student Portfolios"}
-              {activeTab === 'scanner' && "ClassPulse Multimodal Scanner"}
-              {activeTab === 'report' && "School Risk Report — Principal View"}
-              {activeTab === 'analytics' && "Analytics & Reporting Hub"}
-            </h2>
-            <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-600 flex items-center border border-slate-200">
-              Grade 3 • Section A
-            </span>
+        <header className="h-16 bg-white/80 backdrop-blur-md border-b border-indigo-100/50 px-4 md:px-8 flex items-center justify-between shadow-[0_4px_30px_rgba(0,0,0,0.02)] z-10 sticky top-0">
+          <div className="flex items-center space-x-2.5">
+            {/* Mobile Brand Name */}
+            <div className="flex items-center space-x-1.5 md:hidden">
+              <Sparkles className="w-5 h-5 text-indigo-600 animate-pulse" />
+              <span className="font-extrabold text-sm text-slate-900 tracking-tight">ClassPulse</span>
+              <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 ml-1">Class 3-A</span>
+            </div>
+
+            {/* Desktop Brand Title & simplified wording */}
+            <div className="hidden md:flex items-center space-x-3">
+              <h2 className="text-base font-extrabold text-slate-850 capitalize flex items-center">
+                {activeTab === 'dashboard' && "Student Alerts & Progress"}
+                {activeTab === 'students' && "Student Portfolios"}
+                {activeTab === 'scanner' && "Exam Paper Scanner"}
+                {activeTab === 'report' && "Student Dropout Report"}
+                {activeTab === 'analytics' && "Class Performance Trends"}
+              </h2>
+              <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-650 flex items-center border border-slate-200">
+                Class 3 • Section A
+              </span>
+            </div>
           </div>
           
           <div className="flex items-center space-x-4">
@@ -972,6 +982,49 @@ function App() {
               )}
             </div>
 
+            {/* Mobile User Avatar Switcher */}
+            {activeUser && (
+              <div className="relative md:hidden flex items-center">
+                <button 
+                  onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+                  className="w-8 h-8 rounded-full border-2 border-indigo-500/30 overflow-hidden flex items-center justify-center cursor-pointer shadow-sm relative focus:outline-none"
+                  title="Switch profile"
+                >
+                  <img src={activeUser.avatar_url} alt={activeUser.name} className="w-full h-full object-cover" />
+                  <span className="absolute bottom-0 right-0 w-2 h-2 bg-green-450 border border-white rounded-full shadow-sm animate-pulse" />
+                </button>
+                
+                {showProfileDropdown && (
+                  <div className="absolute right-0 top-full mt-2 w-52 bg-slate-900 border border-slate-800 rounded-xl p-2 shadow-2xl space-y-1 z-40 animate-scale-up text-left">
+                    <div className="px-2 py-1.5 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                      Switch Role
+                    </div>
+                    {users.map((user) => (
+                      <button
+                        key={user.id}
+                        onClick={() => {
+                          setActiveUser(user);
+                          setShowProfileDropdown(false);
+                        }}
+                        className={`w-full flex items-center justify-between p-2 rounded-lg text-left transition-all duration-155 cursor-pointer ${
+                          activeUser?.id === user.id ? 'bg-slate-800 text-white' : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-2 truncate">
+                          <img src={user.avatar_url} alt={user.name} className="w-5.5 h-5.5 rounded-full bg-slate-850" />
+                          <div className="truncate">
+                            <p className="text-[11px] font-bold truncate leading-tight">{user.name}</p>
+                            <p className="text-[8px] text-slate-550 leading-none">{user.role}</p>
+                          </div>
+                        </div>
+                        <span className={`w-1 h-1 rounded-full ${user.status === 'Active' ? 'bg-green-450' : 'bg-slate-650'}`} />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <button 
               onClick={fetchInitialData}
               className="p-2 text-slate-400 hover:text-slate-650 hover:bg-slate-100 rounded-full transition-all border border-slate-200"
@@ -979,7 +1032,7 @@ function App() {
             >
               <RefreshCw className="w-4 h-4" />
             </button>
-            <div className="flex items-center space-x-2 bg-brand-50 border border-brand-100 px-3 py-1 rounded-full text-brand-700 text-xs font-semibold">
+            <div className="hidden sm:flex items-center space-x-2 bg-brand-50 border border-brand-100 px-3 py-1 rounded-full text-brand-700 text-xs font-semibold">
               <Sparkles className="w-3.5 h-3.5 mr-1" />
               SahAI for Shiksha '26
             </div>
@@ -987,7 +1040,7 @@ function App() {
         </header>
 
         {/* Tab Contents */}
-        <div className="flex-1 overflow-y-auto p-8 relative z-0">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8 relative z-0">
           
           {/* TAB 1: CLASS ANALYTICS & EWS RADAR */}
           {activeTab === 'dashboard' && (
@@ -2850,6 +2903,61 @@ function App() {
           )}
 
         </div>
+
+      {/* Mobile Bottom Navigation Bar */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-slate-900 border-t border-slate-800 flex justify-around items-center z-30 px-2 pb-safe shadow-lg no-print">
+        <button 
+          onClick={() => setActiveTab('dashboard')}
+          className={`flex flex-col items-center justify-center flex-1 py-1 transition-all cursor-pointer ${
+            activeTab === 'dashboard' ? 'text-brand-400 scale-105' : 'text-slate-400 hover:text-slate-350'
+          }`}
+        >
+          <TrendingUp className="w-5 h-5" />
+          <span className="text-[9px] font-bold mt-1">Dashboard</span>
+        </button>
+        
+        <button 
+          onClick={() => setActiveTab('students')}
+          className={`flex flex-col items-center justify-center flex-1 py-1 transition-all cursor-pointer ${
+            activeTab === 'students' ? 'text-brand-400 scale-105' : 'text-slate-400 hover:text-slate-350'
+          }`}
+        >
+          <Users className="w-5 h-5" />
+          <span className="text-[9px] font-bold mt-1">Portfolios</span>
+        </button>
+        
+        <button 
+          onClick={() => setActiveTab('scanner')}
+          className={`flex flex-col items-center justify-center flex-1 py-1 transition-all cursor-pointer ${
+            activeTab === 'scanner' ? 'text-brand-400 scale-105' : 'text-slate-400 hover:text-slate-350'
+          }`}
+        >
+          <UploadCloud className="w-5 h-5" />
+          <span className="text-[9px] font-bold mt-1">Scanner</span>
+        </button>
+        
+        {activeUser && activeUser.role === 'School Principal' && (
+          <button 
+            onClick={() => setActiveTab('report')}
+            className={`flex flex-col items-center justify-center flex-1 py-1 transition-all cursor-pointer ${
+              activeTab === 'report' ? 'text-brand-400 scale-105' : 'text-slate-400 hover:text-slate-350'
+            }`}
+          >
+            <ClipboardList className="w-5 h-5" />
+            <span className="text-[9px] font-bold mt-1">Report</span>
+          </button>
+        )}
+        
+        <button 
+          onClick={() => { setActiveTab('analytics'); fetchProgressTrends(); fetchHeatmapData(); fetchAttendanceEws(); fetchCompareSections(); }}
+          className={`flex flex-col items-center justify-center flex-1 py-1 transition-all cursor-pointer ${
+            activeTab === 'analytics' ? 'text-brand-400 scale-105' : 'text-slate-400 hover:text-slate-350'
+          }`}
+        >
+          <BarChart3 className="w-5 h-5" />
+          <span className="text-[9px] font-bold mt-1">Trends</span>
+        </button>
+      </div>
 
       </main>
 
