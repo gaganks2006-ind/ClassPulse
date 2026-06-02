@@ -1189,7 +1189,12 @@ function App() {
     }
 
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+      <div className="min-h-screen bg-[#02081c] text-slate-100 flex flex-col font-sans relative overflow-hidden">
+        {/* Signature Glowing brand studio light projections */}
+        <div className="absolute left-[-10%] top-[25%] w-[500px] h-[500px] bg-gradient-to-br from-cyan-400/12 to-emerald-450/2 rounded-full blur-[120px] pointer-events-none z-0 animate-pulse" style={{ animationDuration: '8s' }} />
+        <div className="absolute right-[-10%] top-[10%] w-[550px] h-[550px] bg-gradient-to-bl from-blue-600/15 to-purple-650/2 rounded-full blur-[130px] pointer-events-none z-0" />
+        <div className="absolute bottom-0 left-[20%] w-[35%] h-[20%] bg-gradient-to-b from-cyan-500/5 to-transparent blur-md pointer-events-none z-0" />
+        <div className="absolute bottom-0 right-[25%] w-[25%] h-[20%] bg-gradient-to-b from-blue-500/5 to-transparent blur-md pointer-events-none z-0" />
         <header className="h-16 bg-slate-900 border-b border-slate-800 px-6 flex items-center justify-between shadow-xl sticky top-0 z-30">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-xl border border-indigo-500/20">
@@ -1912,7 +1917,12 @@ function App() {
 
   return (
     <>
-      <div className={`flex h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 overflow-hidden text-slate-800 ${showWorksheetModal ? 'no-print' : ''}`}>
+      <div className={`flex h-screen bg-[#02081c] overflow-hidden text-slate-800 relative ${showWorksheetModal ? 'no-print' : ''}`}>
+        {/* Signature Glowing brand studio light projections */}
+        <div className="absolute left-[-10%] top-[25%] w-[500px] h-[500px] bg-gradient-to-br from-cyan-400/12 to-emerald-450/2 rounded-full blur-[120px] pointer-events-none z-0 animate-pulse" style={{ animationDuration: '8s' }} />
+        <div className="absolute right-[-10%] top-[10%] w-[550px] h-[550px] bg-gradient-to-bl from-blue-600/15 to-purple-650/2 rounded-full blur-[130px] pointer-events-none z-0" />
+        <div className="absolute bottom-0 left-[20%] w-[35%] h-[20%] bg-gradient-to-b from-cyan-500/5 to-transparent blur-md pointer-events-none z-0" />
+        <div className="absolute bottom-0 right-[25%] w-[25%] h-[20%] bg-gradient-to-b from-blue-500/5 to-transparent blur-md pointer-events-none z-0" />
       
       {/* 1. Sidebar Navigation */}
       <aside className="hidden md:flex w-64 bg-indigo-950/90 backdrop-blur-2xl text-slate-300 flex-col justify-between shadow-2xl border-r border-indigo-900/50 print:hidden z-20">
