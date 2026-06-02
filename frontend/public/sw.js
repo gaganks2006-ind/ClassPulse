@@ -1,10 +1,7 @@
-const CACHE_NAME = "classpulse-v1";
+const CACHE_NAME = "classpulse-v2";
 const ASSETS = [
   "/",
   "/index.html",
-  "/src/main.jsx",
-  "/src/App.jsx",
-  "/src/index.css",
   "/manifest.json",
   "/favicon.svg"
 ];
@@ -17,6 +14,7 @@ self.addEventListener("install", (event) => {
       return cache.addAll(ASSETS);
     })
   );
+  self.skipWaiting(); // Force active immediately
 });
 
 // Activate Event
@@ -31,36 +29,37 @@ self.addEventListener("activate", (event) => {
           }
         })
       );
+    }).then(() => {
+      return self.clients.claim(); // Take control of all pages immediately
     })
   );
 });
 
-// Fetch Event (Offline Fallback Strategy)
+// Fetch Event (Network-First Strategy)
 self.addEventListener("fetch", (event) => {
-  // Only cache GET requests
+  // Only handle GET requests
   if (event.request.method !== "GET") return;
 
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      
-      return fetch(event.request)
-        .then((networkResponse) => {
-          // If response is valid, dynamically add to cache
-          if (networkResponse && networkResponse.status === 200 && networkResponse.type === "basic") {
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
+    fetch(event.request)
+      .then((networkResponse) => {
+        // If response is valid, dynamically add/update cache
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === "basic") {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+        }
+        return networkResponse;
+      })
+      .catch(() => {
+        // Offline fallback - serve from cache if available
+        return caches.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) {
+            return cachedResponse;
           }
-          return networkResponse;
-        })
-        .catch(() => {
-          // Offline fallback
           console.log("ClassPulse SW: Offline fetch fallback triggered");
         });
-    })
+      })
   );
 });
