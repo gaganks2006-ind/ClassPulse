@@ -1752,10 +1752,24 @@ function App() {
     ];
 
     return (
-      <div className="bg-gradient-to-tr from-slate-950 via-indigo-950 to-purple-950 min-h-screen relative overflow-hidden flex flex-col justify-center items-center p-4 md:p-8 font-sans">
-        {/* Floating background ambient glow */}
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-500/10 rounded-full blur-[120px] pointer-events-none" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-[120px] pointer-events-none" />
+      <div className="bg-[#02081c] min-h-screen relative overflow-hidden flex flex-col justify-center items-center p-4 md:p-8 font-sans select-none">
+        {/* Glowing studio light projections (representing the user's uploaded layout) */}
+        
+        {/* Left vibrant cyan/teal light glow */}
+        <div className="absolute left-[-15%] top-[30%] w-[600px] h-[600px] bg-gradient-to-br from-cyan-400/25 to-emerald-450/5 rounded-full blur-[130px] pointer-events-none z-0 animate-pulse" style={{ animationDuration: '6s' }} />
+        
+        {/* Right deep royal blue/violet light glow */}
+        <div className="absolute right-[-10%] top-[-10%] w-[650px] h-[650px] bg-gradient-to-bl from-blue-600/30 to-purple-650/5 rounded-full blur-[140px] pointer-events-none z-0" />
+
+        {/* Ambient bottom floor lights */}
+        <div className="absolute bottom-0 left-0 right-0 h-[22%] bg-gradient-to-t from-[#020512] via-[#020922]/90 to-[#02081c]/10 pointer-events-none z-0" />
+        
+        {/* Glowing floor horizon separator line */}
+        <div className="absolute bottom-[22%] left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#00f3ff]/40 to-transparent shadow-[0_0_20px_rgba(0,243,255,0.4)] pointer-events-none z-0" />
+
+        {/* Diffused reflective floor spotlights */}
+        <div className="absolute bottom-0 left-[10%] w-[45%] h-[22%] bg-gradient-to-b from-cyan-500/8 to-transparent blur-md pointer-events-none z-0" />
+        <div className="absolute bottom-0 right-[15%] w-[35%] h-[22%] bg-gradient-to-b from-blue-500/8 to-transparent blur-md pointer-events-none z-0" />
 
         <div className="max-w-xl w-full z-10 space-y-6">
           {/* Frosted glassmorphic card */}
