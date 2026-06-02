@@ -1,4 +1,5 @@
 import React from 'react';
+import AttendanceLogger from './AttendanceLogger';
 import { 
   Users, 
   TrendingUp, 
@@ -213,7 +214,9 @@ export function ClassTeacherDashboard({
   setInterventionStudent, 
   setShowInterventionModal, 
   setEscalationStudent, 
-  setShowEscalationModal 
+  setShowEscalationModal,
+  API_BASE,
+  onAttendanceSubmitted
 }) {
   const section = activeUser.name.includes("Priya") ? "B" : "A";
   const myStudents = students.filter(s => s.section === section);
@@ -232,6 +235,14 @@ export function ClassTeacherDashboard({
           Welcome, Teacher {activeUser.name}. Monitor Grade 3-{section} attendance rates, early-warning alerts, and assign student support plans.
         </p>
       </div>
+
+      {/* Daily Attendance Logger Grid */}
+      <AttendanceLogger 
+        activeUser={activeUser}
+        students={students}
+        API_BASE={API_BASE}
+        onAttendanceSubmitted={onAttendanceSubmitted}
+      />
 
       {/* Classroom KPI Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

@@ -179,6 +179,7 @@ function App() {
   const [parentAlertStudent, setParentAlertStudent] = useState(null);
   const [parentAlertType, setParentAlertType] = useState("WhatsApp");
   const [parentAlertLog, setParentAlertLog] = useState([]);
+  const [alertLogTab, setAlertLogTab] = useState('all');
   const [isSendingParentAlert, setIsSendingParentAlert] = useState(false);
   const [showEscalationModal, setShowEscalationModal] = useState(false);
   const [escalationStudent, setEscalationStudent] = useState(null);
@@ -2254,6 +2255,8 @@ function App() {
                   setShowInterventionModal={setShowInterventionModal}
                   setEscalationStudent={setEscalationStudent}
                   setShowEscalationModal={setShowEscalationModal}
+                  API_BASE={API_BASE}
+                  onAttendanceSubmitted={fetchInitialData}
                 />
               )}
               {activeUser.role === 'Subject Teacher' && (
@@ -4198,23 +4201,72 @@ function App() {
             </form>
 
             {/* Dispatch Logs */}
-            <div className="border-t border-slate-100 pt-4 space-y-2">
-              <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">History Dispatch Logs</h4>
-              <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
-                {parentAlertLog.length > 0 ? (
-                  parentAlertLog.map(log => (
-                    <div key={log.id} className="p-2.5 rounded-xl border border-slate-100 bg-slate-50 text-[10px] space-y-1">
-                      <div className="flex justify-between items-center font-bold">
-                        <span className="text-slate-700">{log.alert_type} Sent to {log.parent_name}</span>
-                        <span className="text-emerald-600">{log.status}</span>
-                      </div>
-                      <p className="text-slate-500 leading-normal">"{log.message}"</p>
-                      <span className="text-[9px] text-slate-400 font-mono">{new Date(log.timestamp).toLocaleString()}</span>
-                    </div>
-                  ))
+            <div className="border-t border-slate-100 pt-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">History Dispatch Logs</h4>
+                
+                {/* Tab selector */}
+                <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                  {[
+                    { key: 'all', label: 'All' },
+                    { key: 'manual', label: 'Manual' },
+                    { key: 'auto', label: 'Auto' }
+                  ].map(tab => (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => setAlertLogTab(tab.key)}
+                      className={`px-2 py-0.5 rounded-md text-[9px] font-bold transition-all cursor-pointer ${
+                        alertLogTab === tab.key
+                          ? 'bg-white text-slate-800 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+                {parentAlertLog.filter(log => {
+                  if (alertLogTab === 'manual') return log.status === 'Sent';
+                  if (alertLogTab === 'auto') return log.status === 'Auto-Sent';
+                  return true;
+                }).length > 0 ? (
+                  parentAlertLog
+                    .filter(log => {
+                      if (alertLogTab === 'manual') return log.status === 'Sent';
+                      if (alertLogTab === 'auto') return log.status === 'Auto-Sent';
+                      return true;
+                    })
+                    .map(log => {
+                      const isAuto = log.status === 'Auto-Sent';
+                      return (
+                        <div key={log.id} className="p-2.5 rounded-xl border border-slate-150 bg-slate-50 text-[10px] space-y-1 hover:border-slate-300 transition-all">
+                          <div className="flex justify-between items-center font-bold">
+                            <span className="text-slate-700 flex items-center gap-1.5">
+                              {log.alert_type} to {log.parent_name}
+                              {isAuto ? (
+                                <span className="bg-indigo-50 border border-indigo-200 text-indigo-700 px-1.5 py-0.2 rounded text-[8px] font-black uppercase tracking-wider flex items-center gap-0.5">
+                                  🔔 Auto Alert
+                                </span>
+                              ) : (
+                                <span className="bg-slate-200 border border-slate-300 text-slate-750 px-1.5 py-0.2 rounded text-[8px] font-black uppercase tracking-wider flex items-center gap-0.5">
+                                  👤 Manual
+                                </span>
+                              )}
+                            </span>
+                            <span className={isAuto ? 'text-indigo-600' : 'text-emerald-600'}>{log.status}</span>
+                          </div>
+                          <p className="text-slate-500 leading-normal font-medium">"{log.message}"</p>
+                          <span className="text-[9px] text-slate-400 font-mono">{new Date(log.timestamp).toLocaleString()}</span>
+                        </div>
+                      );
+                    })
                 ) : (
-                  <div className="text-center py-4 text-slate-450 text-[10px] italic">
-                    No alerts have been dispatched for this student yet.
+                  <div className="text-center py-6 text-slate-400 text-[10px] italic bg-slate-50 border border-dashed border-slate-200 rounded-2xl">
+                    No matching alerts found in the logs.
                   </div>
                 )}
               </div>

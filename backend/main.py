@@ -632,6 +632,45 @@ def submit_attendance(data: AttendanceSubmit):
                 )
                 with open(ALERTS_LOG_PATH, "a", encoding="utf-8") as f:
                     f.write(alert_log_entry)
+
+            # Auto WhatsApp/SMS Alert dispatch on risk transition to High or Medium
+            if student and (
+                (new_risk == "High" and student['risk_level'] != "High") or 
+                (new_risk == "Medium" and student['risk_level'] != "Medium" and student['risk_level'] != "High")
+            ):
+                # Find parent associated with this student
+                parent = conn.execute(
+                    "SELECT * FROM users WHERE role = 'Parent' AND associated_student_id = ?",
+                    (record.student_id,)
+                ).fetchone()
+                parent_name = parent["name"] if parent else "Parent/Guardian"
+                
+                if new_risk == "High":
+                    message = (
+                        f"🚨 CLASSPULSE AUTO-ALERT: Dear {parent_name}, your child {student['name']} "
+                        f"(Roll: {student['roll_number']}) attendance dropped to {new_rate}%. Risk: HIGH. "
+                        f"Please contact the school immediately for a consultation. "
+                        f"— ClassPulse EWS System"
+                    )
+                else:
+                    message = (
+                        f"⚠️ CLASSPULSE AUTO-NOTICE: Dear {parent_name}, your child {student['name']} "
+                        f"(Roll: {student['roll_number']}) attendance is {new_rate}%. This is below the 85% safety line. "
+                        f"Please ensure regular school attendance. "
+                        f"— ClassPulse EWS System"
+                    )
+                
+                # Insert into parent_alerts with status 'Auto-Sent'
+                cursor.execute(
+                    "INSERT INTO parent_alerts (student_id, parent_name, alert_type, message, status) VALUES (?, ?, 'WhatsApp', ?, 'Auto-Sent')",
+                    (record.student_id, parent_name, message)
+                )
+                
+                # Create notification for the teacher
+                cursor.execute(
+                    "INSERT INTO notifications (student_id, type, title, message) VALUES (?, 'parent_alert', ?, ?)",
+                    (record.student_id, f"Auto-Alert Triggered for {student['name']}", f"Auto-sent WhatsApp alert to {parent_name} for crossing into {new_risk} Risk threshold.")
+                )
         
         # Log attendance activity
         cursor.execute("""
