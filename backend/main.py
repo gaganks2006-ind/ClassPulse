@@ -7,7 +7,7 @@ from datetime import datetime
 from pydantic import BaseModel
 from typing import List, Optional
 from database import get_db_connection, init_db
-from analyzer import analyze_test_paper
+from analyzer import analyze_test_paper, generate_practice_mcqs
 
 app = FastAPI(title="ClassPulse Backend - Role-Based ERP & Student Center", version="2.5.0")
 
@@ -1842,6 +1842,329 @@ def resolve_escalation(data: dict):
         )
         conn.commit()
         return {"status": "success", "message": "Escalation resolved."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+# --- Student Portal API Endpoints ---
+
+class StudentLogin(BaseModel):
+    roll_number: str
+    password: str
+
+class StudentGoalCreate(BaseModel):
+    student_id: int
+    subject: str
+    target_score: float
+
+class StudentPracticeLogCreate(BaseModel):
+    student_id: int
+    subject: str
+    concept: str
+    score: float
+
+
+@app.post("/api/student/login")
+def student_login(credentials: StudentLogin):
+    conn = get_db_connection()
+    try:
+        row = conn.execute(
+            "SELECT * FROM students WHERE roll_number = ? AND password = ?",
+            (credentials.roll_number, credentials.password)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=401, detail="Invalid roll number or password")
+        
+        student = dict(row)
+        return {
+            "status": "success",
+            "student": {
+                "id": student["id"],
+                "name": student["name"],
+                "roll_number": student["roll_number"],
+                "grade": student["grade"],
+                "section": student["section"],
+                "attendance_rate": student["attendance_rate"],
+                "risk_level": student["risk_level"]
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.get("/api/student/dashboard")
+def get_student_dashboard(student_id: int):
+    conn = get_db_connection()
+    try:
+        # Student profile
+        student_row = conn.execute("SELECT * FROM students WHERE id = ?", (student_id,)).fetchone()
+        if not student_row:
+            raise HTTPException(status_code=404, detail="Student not found")
+        student = dict(student_row)
+
+        # Practice logs
+        practice_rows = conn.execute(
+            "SELECT * FROM student_practice_logs WHERE student_id = ? ORDER BY timestamp DESC",
+            (student_id,)
+        ).fetchall()
+        practice_logs = [dict(r) for r in practice_rows]
+
+        # Scan/Assessment history
+        assessment_rows = conn.execute(
+            "SELECT a.*, u.name as scanned_by_name FROM assessments a "
+            "LEFT JOIN users u ON a.scanned_by_user_id = u.id "
+            "WHERE a.student_id = ? ORDER BY a.assessment_date DESC",
+            (student_id,)
+        ).fetchall()
+        assessments = [dict(r) for r in assessment_rows]
+
+        # Current goals
+        goal_rows = conn.execute(
+            "SELECT * FROM student_goals WHERE student_id = ? ORDER BY timestamp DESC",
+            (student_id,)
+        ).fetchall()
+        goals = [dict(r) for r in goal_rows]
+
+        # Badges
+        badge_rows = conn.execute(
+            "SELECT * FROM student_badges WHERE student_id = ? ORDER BY awarded_at DESC",
+            (student_id,)
+        ).fetchall()
+        badges = [dict(r) for r in badge_rows]
+
+        # Learning gaps
+        gap_rows = conn.execute(
+            "SELECT lg.*, a.subject, a.assessment_date FROM learning_gaps lg "
+            "JOIN assessments a ON lg.assessment_id = a.id "
+            "WHERE lg.student_id = ? ORDER BY a.assessment_date DESC",
+            (student_id,)
+        ).fetchall()
+        gaps = [dict(r) for r in gap_rows]
+
+        # Summary statistics
+        total_practices = len(practice_logs)
+        avg_practice_score = 0.0
+        if total_practices > 0:
+            avg_practice_score = sum(r["score"] for r in practice_logs) / total_practices
+
+        avg_assessment_score = 0.0
+        if len(assessments) > 0:
+            avg_assessment_score = sum(r["total_score"] for r in assessments if r["total_score"] is not None) / len(assessments)
+
+        return {
+            "status": "success",
+            "student": student,
+            "practice_logs": practice_logs,
+            "assessments": assessments,
+            "goals": goals,
+            "badges": badges,
+            "gaps": gaps,
+            "stats": {
+                "total_practices": total_practices,
+                "avg_practice_score": round(avg_practice_score, 2),
+                "avg_assessment_score": round(avg_assessment_score, 2)
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.get("/api/student/goals")
+def get_student_goals(student_id: int):
+    conn = get_db_connection()
+    try:
+        rows = conn.execute("SELECT * FROM student_goals WHERE student_id = ? ORDER BY timestamp DESC", (student_id,)).fetchall()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.post("/api/student/goals")
+def create_student_goal(goal: StudentGoalCreate):
+    conn = get_db_connection()
+    try:
+        # Check if goal exists for subject
+        existing = conn.execute(
+            "SELECT * FROM student_goals WHERE student_id = ? AND subject = ?",
+            (goal.student_id, goal.subject)
+        ).fetchone()
+
+        # Calculate current progress for this subject (e.g. from average practice scores or assessment scores)
+        avg_row = conn.execute(
+            "SELECT AVG(score) as avg_score FROM student_practice_logs WHERE student_id = ? AND subject = ?",
+            (goal.student_id, goal.subject)
+        ).fetchone()
+        current_progress = avg_row["avg_score"] if avg_row and avg_row["avg_score"] is not None else 0.0
+        
+        status = "Achieved" if current_progress >= goal.target_score else "In Progress"
+
+        if existing:
+            conn.execute(
+                "UPDATE student_goals SET target_score = ?, current_progress = ?, status = ? WHERE id = ?",
+                (goal.target_score, current_progress, status, existing["id"])
+            )
+        else:
+            conn.execute(
+                "INSERT INTO student_goals (student_id, subject, target_score, current_progress, status) VALUES (?, ?, ?, ?, ?)",
+                (goal.student_id, goal.subject, goal.target_score, current_progress, status)
+            )
+
+        # Auto-award Goal Setter badge
+        conn.execute(
+            "INSERT OR IGNORE INTO student_badges (student_id, badge_name, badge_description) "
+            "VALUES (?, 'Goal Setter', 'Set your first learning target')",
+            (goal.student_id,)
+        )
+        conn.commit()
+        return {"status": "success", "message": "Goal updated successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.get("/api/student/practice-questions")
+def get_practice_questions(student_id: int, subject: str, concept: Optional[str] = None):
+    conn = get_db_connection()
+    try:
+        # If concept not provided, look up learning gaps for this student and subject
+        if not concept:
+            gap_row = conn.execute(
+                "SELECT lg.concept FROM learning_gaps lg "
+                "JOIN assessments a ON lg.assessment_id = a.id "
+                "WHERE lg.student_id = ? AND a.subject = ? AND lg.status IN ('Critical Gap', 'Needs Improvement') "
+                "ORDER BY a.assessment_date DESC LIMIT 1",
+                (student_id, subject)
+            ).fetchone()
+            if gap_row:
+                concept = gap_row["concept"]
+            else:
+                # Get any gap
+                any_gap = conn.execute(
+                    "SELECT concept FROM learning_gaps WHERE student_id = ? LIMIT 1",
+                    (student_id,)
+                ).fetchone()
+                concept = any_gap["concept"] if any_gap else ("Double-digit Addition with Carry" if subject.lower() == "mathematics" else "Consonant Blend Sounding")
+
+        questions = generate_practice_mcqs(concept, subject)
+        return {
+            "status": "success",
+            "concept": concept,
+            "subject": subject,
+            "questions": questions
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.post("/api/student/practice-log")
+def log_practice_attempt(log: StudentPracticeLogCreate):
+    conn = get_db_connection()
+    try:
+        # Insert log
+        conn.execute(
+            "INSERT INTO student_practice_logs (student_id, subject, concept, score) VALUES (?, ?, ?, ?)",
+            (log.student_id, log.subject, log.concept, log.score)
+        )
+        
+        # Award badges based on score
+        badges_awarded = []
+        if log.score >= 6.0:
+            # Check Practice Champion
+            conn.execute(
+                "INSERT OR IGNORE INTO student_badges (student_id, badge_name, badge_description) "
+                "VALUES (?, 'Practice Champion', 'Completed a practice quiz with a passing score')",
+                (log.student_id,)
+            )
+            badges_awarded.append("Practice Champion")
+            
+        if log.score == 10.0:
+            # Check Perfect 10 and FLN Star
+            conn.execute(
+                "INSERT OR IGNORE INTO student_badges (student_id, badge_name, badge_description) "
+                "VALUES (?, 'Perfect 10', 'Scored 10/10 on a practice quiz')",
+                (log.student_id,)
+            )
+            conn.execute(
+                "INSERT OR IGNORE INTO student_badges (student_id, badge_name, badge_description) "
+                "VALUES (?, 'FLN Star', 'Achieved excellent mastery score in FLN concepts')",
+                (log.student_id,)
+            )
+            badges_awarded.extend(["Perfect 10", "FLN Star"])
+
+        # Check total practices count for Practice Legend
+        count_row = conn.execute("SELECT COUNT(*) as cnt FROM student_practice_logs WHERE student_id = ?", (log.student_id,)).fetchone()
+        if count_row and count_row["cnt"] >= 5:
+            conn.execute(
+                "INSERT OR IGNORE INTO student_badges (student_id, badge_name, badge_description) "
+                "VALUES (?, 'Practice Legend', 'Completed 5 or more practice quizzes')",
+                (log.student_id,)
+            )
+            badges_awarded.append("Practice Legend")
+
+        # Update Goal progress if a goal exists for this subject
+        goal_row = conn.execute(
+            "SELECT * FROM student_goals WHERE student_id = ? AND subject = ?",
+            (log.student_id, log.subject)
+        ).fetchone()
+
+        if goal_row:
+            # Calculate new average practice score
+            avg_row = conn.execute(
+                "SELECT AVG(score) as avg_score FROM student_practice_logs WHERE student_id = ? AND subject = ?",
+                (log.student_id, log.subject)
+            ).fetchone()
+            new_progress = avg_row["avg_score"] if avg_row and avg_row["avg_score"] is not None else 0.0
+            
+            # Round progress
+            new_progress = round(new_progress, 2)
+            status = "Achieved" if new_progress >= goal_row["target_score"] else "In Progress"
+            
+            conn.execute(
+                "UPDATE student_goals SET current_progress = ?, status = ? WHERE id = ?",
+                (new_progress, status, goal_row["id"])
+            )
+            
+            if status == "Achieved":
+                conn.execute(
+                    "INSERT OR IGNORE INTO student_badges (student_id, badge_name, badge_description) "
+                    "VALUES (?, 'Goal Achiever', 'Successfully met a subject mastery goal')",
+                    (log.student_id,)
+                )
+                badges_awarded.append("Goal Achiever")
+
+        conn.commit()
+        return {
+            "status": "success",
+            "message": "Practice logged successfully.",
+            "badges_awarded": badges_awarded
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.get("/api/student/badges")
+def get_student_badges(student_id: int):
+    conn = get_db_connection()
+    try:
+        rows = conn.execute("SELECT * FROM student_badges WHERE student_id = ? ORDER BY awarded_at DESC", (student_id,)).fetchall()
+        return [dict(r) for r in rows]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:

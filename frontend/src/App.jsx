@@ -185,6 +185,28 @@ function App() {
   const [teacherEmail, setTeacherEmail] = useState("teacher@school.edu");
   const [isSendingDigest, setIsSendingDigest] = useState(false);
 
+  // Student Portal States
+  const [portalMode, setPortalMode] = useState("staff"); // "staff" | "student"
+  const [studentActiveTab, setStudentActiveTab] = useState("dashboard"); // "dashboard" | "practice"
+  const [studentSession, setStudentSession] = useState(null);
+  const [studentDashboardData, setStudentDashboardData] = useState(null);
+  const [isLoadingStudentDashboard, setIsLoadingStudentDashboard] = useState(false);
+  const [studentRollNumberInput, setStudentRollNumberInput] = useState("");
+  const [studentPasswordInput, setStudentPasswordInput] = useState("");
+  const [studentLoginError, setStudentLoginError] = useState("");
+  const [studentSelectedSubject, setStudentSelectedSubject] = useState("Mathematics");
+  const [studentPracticeQuestions, setStudentPracticeQuestions] = useState(null);
+  const [studentActiveQuestionIndex, setStudentActiveQuestionIndex] = useState(0);
+  const [studentAnswers, setStudentAnswers] = useState({});
+  const [studentQuizScore, setStudentQuizScore] = useState(null);
+  const [studentQuizCompleted, setStudentQuizCompleted] = useState(false);
+  const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
+  const [isSubmittingQuiz, setIsSubmittingQuiz] = useState(false);
+  const [showQuizResultModal, setShowQuizResultModal] = useState(false);
+  const [studentNewGoalSubject, setStudentNewGoalSubject] = useState("Mathematics");
+  const [studentNewGoalTarget, setStudentNewGoalTarget] = useState("9.0");
+  const [isSavingGoal, setIsSavingGoal] = useState(false);
+
 
   useEffect(() => {
     fetchInitialData();
@@ -747,6 +769,820 @@ function App() {
     }
   };
 
+  // --- Student Portal Handlers ---
+  const fetchStudentDashboard = async (studentId) => {
+    setIsLoadingStudentDashboard(true);
+    try {
+      const res = await fetch(`${API_BASE}/student/dashboard?student_id=${studentId}`);
+      const data = await res.json();
+      if (res.ok) {
+        setStudentDashboardData(data);
+      } else {
+        console.error("Failed to load student dashboard", data.detail);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoadingStudentDashboard(false);
+    }
+  };
+
+  const handleStudentLogin = async (e) => {
+    if (e) e.preventDefault();
+    setStudentLoginError("");
+    if (!studentRollNumberInput.trim() || !studentPasswordInput.trim()) {
+      setStudentLoginError("Please enter both Roll Number and Password.");
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/student/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roll_number: studentRollNumberInput.trim(),
+          password: studentPasswordInput.trim()
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setStudentSession(data.student);
+        fetchStudentDashboard(data.student.id);
+        setStudentLoginError("");
+      } else {
+        setStudentLoginError(data.detail || "Invalid Roll Number or Password.");
+      }
+    } catch (err) {
+      console.error(err);
+      setStudentLoginError("Server communication failed. Please check backend.");
+    }
+  };
+
+  const handleQuickStudentLogin = async (rollNumber) => {
+    setStudentLoginError("");
+    try {
+      const res = await fetch(`${API_BASE}/student/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roll_number: rollNumber,
+          password: "password123"
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setStudentSession(data.student);
+        fetchStudentDashboard(data.student.id);
+        setStudentLoginError("");
+      } else {
+        setStudentLoginError(data.detail || "Quick login failed.");
+      }
+    } catch (err) {
+      console.error(err);
+      setStudentLoginError("Server communication failed.");
+    }
+  };
+
+  const handleStudentLogout = () => {
+    setStudentSession(null);
+    setStudentDashboardData(null);
+    setStudentRollNumberInput("");
+    setStudentPasswordInput("");
+    setStudentPracticeQuestions(null);
+    setStudentAnswers({});
+    setStudentQuizScore(null);
+    setStudentQuizCompleted(false);
+  };
+
+  const handleGenerateQuiz = async (subject, concept) => {
+    if (!studentSession) return;
+    setIsGeneratingQuiz(true);
+    setStudentPracticeQuestions(null);
+    setStudentAnswers({});
+    setStudentQuizScore(null);
+    setStudentQuizCompleted(false);
+    setStudentActiveQuestionIndex(0);
+    
+    try {
+      const conceptParam = concept ? `&concept=${encodeURIComponent(concept)}` : '';
+      const res = await fetch(`${API_BASE}/student/practice-questions?student_id=${studentSession.id}&subject=${encodeURIComponent(subject)}${conceptParam}`);
+      const data = await res.json();
+      if (res.ok) {
+        setStudentPracticeQuestions(data.questions);
+        setStudentSelectedSubject(subject);
+      } else {
+        alert("Failed to load questions: " + data.detail);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error contacting server to generate quiz.");
+    } finally {
+      setIsGeneratingQuiz(false);
+    }
+  };
+
+  const handleAnswerQuestion = (qIndex, option) => {
+    setStudentAnswers(prev => ({
+      ...prev,
+      [qIndex]: option
+    }));
+  };
+
+  const handleSubmitQuiz = async (concept) => {
+    if (!studentSession || !studentPracticeQuestions) return;
+    setIsSubmittingQuiz(true);
+
+    let correctCount = 0;
+    studentPracticeQuestions.forEach((q, idx) => {
+      if (studentAnswers[idx] === q.correct_option) {
+        correctCount++;
+      }
+    });
+
+    const finalScore = (correctCount / studentPracticeQuestions.length) * 10.0;
+    
+    try {
+      const res = await fetch(`${API_BASE}/student/practice-log`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          student_id: studentSession.id,
+          subject: studentSelectedSubject,
+          concept: concept || "Practice Session",
+          score: finalScore
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setStudentQuizScore(finalScore);
+        setStudentQuizCompleted(true);
+        setShowQuizResultModal(true);
+        fetchStudentDashboard(studentSession.id);
+      } else {
+        alert("Failed to submit score: " + data.detail);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error submitting score to server.");
+    } finally {
+      setIsSubmittingQuiz(false);
+    }
+  };
+
+  const handleSaveGoal = async (e) => {
+    e.preventDefault();
+    if (!studentSession) return;
+    setIsSavingGoal(true);
+    try {
+      const res = await fetch(`${API_BASE}/student/goals`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          student_id: studentSession.id,
+          subject: studentNewGoalSubject,
+          target_score: parseFloat(studentNewGoalTarget)
+        })
+      });
+      if (res.ok) {
+        alert("Your goal has been set successfully!");
+        fetchStudentDashboard(studentSession.id);
+      } else {
+        const data = await res.json();
+        alert("Failed to save goal: " + data.detail);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSavingGoal(false);
+    }
+  };
+
+  const renderStudentPortal = () => {
+    if (!studentSession) {
+      return (
+        <div className="flex-1 min-h-screen bg-gradient-to-br from-indigo-900 via-slate-900 to-purple-900 flex items-center justify-center p-4">
+          <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl max-w-lg w-full p-8 shadow-2xl space-y-6 text-white animate-scale-up">
+            
+            <div className="text-center space-y-2">
+              <div className="inline-flex p-4 bg-indigo-500/20 text-indigo-300 rounded-3xl border border-indigo-500/30">
+                <Sparkles className="w-10 h-10 animate-pulse" />
+              </div>
+              <h1 className="text-3xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-indigo-200 via-purple-200 to-pink-200">
+                ClassPulse Student Portal
+              </h1>
+              <p className="text-xs text-indigo-200 font-medium tracking-wide">
+                NEP 2020 Aligned Remediation & Mastery Hub
+              </p>
+            </div>
+
+            <form onSubmit={handleStudentLogin} className="space-y-4">
+              {studentLoginError && (
+                <div className="bg-rose-500/20 border border-rose-500/40 text-rose-200 px-4 py-3 rounded-2xl text-xs font-semibold text-center">
+                  {studentLoginError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[10px] font-black uppercase text-indigo-300 tracking-wider mb-1.5">
+                  Roll Number
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. G3-01"
+                  value={studentRollNumberInput}
+                  onChange={(e) => setStudentRollNumberInput(e.target.value)}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 focus:border-indigo-400 focus:bg-white/10 rounded-2xl text-sm text-white placeholder-slate-400 outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase text-indigo-300 tracking-wider mb-1.5">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  value={studentPasswordInput}
+                  onChange={(e) => setStudentPasswordInput(e.target.value)}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 focus:border-indigo-400 focus:bg-white/10 rounded-2xl text-sm text-white placeholder-slate-400 outline-none transition-all"
+                />
+              </div>
+
+              <div className="pt-2 flex space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setPortalMode("staff")}
+                  className="flex-1 py-3 bg-white/10 hover:bg-white/20 text-indigo-200 border border-white/10 rounded-2xl text-xs font-bold transition-all"
+                >
+                  Staff Portal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-650 text-white rounded-2xl text-xs font-bold shadow-lg shadow-indigo-600/30 transition-all"
+                >
+                  Enter Portal
+                </button>
+              </div>
+            </form>
+
+            <div className="relative flex py-2 items-center">
+              <div className="flex-grow border-t border-white/10"></div>
+              <span className="flex-shrink mx-4 text-[10px] font-bold text-indigo-300 uppercase tracking-widest">
+                Assessors: Quick Login
+              </span>
+              <div className="flex-grow border-t border-white/10"></div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-[10px] text-center text-slate-400">
+                Choose a pre-seeded student to instantly simulate mode:
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { name: "Rahul Kumar", roll: "G3-01", desc: "Grade 3 Math Gap" },
+                  { name: "Ananya Rao", roll: "G3-02", desc: "Grade 3 Phonics" },
+                  { name: "Tanvi Rao", roll: "G5-02", desc: "Grade 5 High Risk" }
+                ].map((demo) => (
+                  <button
+                    key={demo.roll}
+                    type="button"
+                    onClick={() => handleQuickStudentLogin(demo.roll)}
+                    className="p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-left transition-all hover:scale-[1.03]"
+                  >
+                    <p className="text-[11px] font-black leading-tight text-indigo-200">{demo.name}</p>
+                    <p className="text-[9px] text-slate-400 mt-0.5">{demo.roll}</p>
+                    <p className="text-[8px] text-slate-500 mt-1 truncate">{demo.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+        <header className="h-16 bg-slate-900 border-b border-slate-800 px-6 flex items-center justify-between shadow-xl sticky top-0 z-30">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-xl border border-indigo-500/20">
+              <Sparkles className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <span className="text-xs text-indigo-400 font-extrabold uppercase tracking-widest">Student Portal</span>
+              <h1 className="text-base font-black text-white leading-none">{studentSession.name}</h1>
+            </div>
+          </div>
+
+          <div className="flex bg-slate-950 p-1 rounded-2xl border border-slate-850 space-x-1">
+            <button
+              onClick={() => setStudentActiveTab("dashboard")}
+              className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                studentActiveTab === "dashboard"
+                  ? "bg-indigo-600 text-white shadow"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              📊 My Dashboard
+            </button>
+            <button
+              onClick={() => {
+                setStudentActiveTab("practice");
+                setStudentPracticeQuestions(null);
+                setStudentAnswers({});
+                setStudentQuizScore(null);
+                setStudentQuizCompleted(false);
+              }}
+              className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                studentActiveTab === "practice"
+                  ? "bg-indigo-600 text-white shadow"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              🧠 AI Practice Room
+            </button>
+          </div>
+
+          <div className="flex items-center space-x-3">
+            <span className="text-[10px] px-2.5 py-1 rounded-full font-bold bg-slate-800 border border-slate-700 text-slate-300">
+              Roll: {studentSession.roll_number} • {studentSession.grade}
+            </span>
+            <button
+              onClick={handleStudentLogout}
+              className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+            >
+              Exit Portal
+            </button>
+          </div>
+        </header>
+
+        {isLoadingStudentDashboard ? (
+          <div className="flex-grow flex items-center justify-center">
+            <div className="text-center space-y-3">
+              <RefreshCw className="w-10 h-10 animate-spin text-indigo-400 mx-auto" />
+              <p className="text-xs text-slate-450 font-bold">Compiling your classroom self-dashboard...</p>
+            </div>
+          </div>
+        ) : (
+          <main className="flex-grow overflow-y-auto p-6 max-w-7xl w-full mx-auto space-y-6">
+            {studentActiveTab === "dashboard" && studentDashboardData && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="col-span-1 md:col-span-2 bg-gradient-to-br from-indigo-900/80 to-purple-900/80 border border-indigo-500/20 rounded-3xl p-6 shadow-xl relative overflow-hidden flex flex-col justify-between">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl -mr-8 -mt-8 pointer-events-none"></div>
+                    <div className="space-y-1.5 relative z-10">
+                      <div className="inline-flex px-2.5 py-1 bg-white/10 rounded-full text-[9px] font-bold tracking-wider text-indigo-200 uppercase">
+                        Welcome Back Champ!
+                      </div>
+                      <h2 className="text-2xl font-black text-white leading-tight">
+                        Keep shining, {studentSession.name}!
+                      </h2>
+                      <p className="text-xs text-indigo-200/90 leading-relaxed max-w-sm">
+                        You have completed <strong className="text-white">{studentDashboardData.stats.total_practices} practice sessions</strong>. Review your concepts below and keep learning!
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-lg flex flex-col justify-between">
+                    <div className="flex justify-between items-start">
+                      <span className="text-[10px] font-black uppercase text-slate-450 tracking-wider">Attendance Rate</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                        studentSession.attendance_rate >= 90 ? "bg-emerald-500/10 text-emerald-400" :
+                        studentSession.attendance_rate >= 75 ? "bg-amber-500/10 text-amber-400" : "bg-rose-500/10 text-rose-400"
+                      }`}>
+                        {studentSession.attendance_rate >= 90 ? 'Excellent' : 'Watchlist'}
+                      </span>
+                    </div>
+                    <div className="my-2.5">
+                      <h3 className="text-3xl font-black text-white">{studentSession.attendance_rate}%</h3>
+                      <p className="text-[10px] text-slate-400 leading-normal mt-1">
+                        {studentSession.attendance_rate >= 85 ? "🎉 Excellent! Keep attending school daily." : "⚠️ Try to attend more classes to cover learning gaps."}
+                      </p>
+                    </div>
+                    <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full rounded-full ${
+                          studentSession.attendance_rate >= 90 ? "bg-emerald-500" :
+                          studentSession.attendance_rate >= 75 ? "bg-amber-500" : "bg-rose-500"
+                        }`}
+                        style={{ width: `${studentSession.attendance_rate}%` }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-lg flex flex-col justify-between">
+                    <div className="flex justify-between items-start">
+                      <span className="text-[10px] font-black uppercase text-slate-450 tracking-wider">Avg Practice Score</span>
+                      <Award className="w-5 h-5 text-indigo-400" />
+                    </div>
+                    <div className="my-2.5">
+                      <h3 className="text-3xl font-black text-white">
+                        {studentDashboardData.stats.avg_practice_score} <span className="text-sm font-bold text-slate-500">/ 10</span>
+                      </h3>
+                      <p className="text-[10px] text-slate-400 leading-normal mt-1">
+                        Computed across all generated self-quizzes.
+                      </p>
+                    </div>
+                    <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-indigo-500 rounded-full"
+                        style={{ width: `${studentDashboardData.stats.avg_practice_score * 10}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-lg space-y-4">
+                    <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                      <div>
+                        <h3 className="text-sm font-black uppercase tracking-wider text-slate-200">My Learning Goals</h3>
+                        <p className="text-[10px] text-slate-455">Set target scores and track your growth</p>
+                      </div>
+                      <BookMarked className="w-5 h-5 text-indigo-400" />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-3.5 pr-0 md:pr-4 md:border-r border-slate-800/80">
+                        {studentDashboardData.goals.length > 0 ? (
+                          studentDashboardData.goals.map((g) => {
+                            const pct = Math.min((g.current_progress / g.target_score) * 100, 100);
+                            return (
+                              <div key={g.id} className="p-3 bg-slate-950 border border-slate-850 rounded-2xl space-y-2">
+                                <div className="flex justify-between text-xs font-bold">
+                                  <span className="text-slate-300">{g.subject}</span>
+                                  <span className={g.status === "Achieved" ? "text-emerald-400 text-[10px] font-black" : "text-amber-400 text-[10px]"}>
+                                    {g.status}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between text-[10px] text-slate-455">
+                                  <span>Current Avg: {g.current_progress.toFixed(1)} / 10</span>
+                                  <span>Target: {g.target_score.toFixed(1)}</span>
+                                </div>
+                                <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                                  <div 
+                                    className={`h-full rounded-full ${g.status === "Achieved" ? "bg-emerald-500" : "bg-indigo-500"}`}
+                                    style={{ width: `${pct}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="text-center py-8 text-slate-500 text-xs italic">
+                            No learning goals defined yet. Set one on the right!
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col justify-center">
+                        <h4 className="text-[11px] font-black uppercase text-indigo-300 tracking-wider mb-3">Set New Target Goal</h4>
+                        <form onSubmit={handleSaveGoal} className="space-y-3">
+                          <div>
+                            <label className="block text-[9px] text-slate-455 uppercase mb-1">Subject</label>
+                            <select
+                              value={studentNewGoalSubject}
+                              onChange={(e) => setStudentNewGoalSubject(e.target.value)}
+                              className="w-full px-3 py-2 bg-slate-950 border border-slate-850 rounded-xl text-xs text-white outline-none"
+                            >
+                              <option value="Mathematics">Mathematics</option>
+                              <option value="English">English</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-[9px] text-slate-455 uppercase mb-1">Target Score (out of 10)</label>
+                            <input
+                              type="number"
+                              step="0.5"
+                              min="1"
+                              max="10"
+                              value={studentNewGoalTarget}
+                              onChange={(e) => setStudentNewGoalTarget(e.target.value)}
+                              className="w-full px-3 py-2 bg-slate-950 border border-slate-850 rounded-xl text-xs text-white outline-none"
+                            />
+                          </div>
+                          <button
+                            type="submit"
+                            disabled={isSavingGoal}
+                            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-650 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow"
+                          >
+                            {isSavingGoal ? "Setting..." : "Lock Goal Target"}
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-lg space-y-4">
+                    <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                      <div>
+                        <h3 className="text-sm font-black uppercase tracking-wider text-slate-200">Achievement Badges</h3>
+                        <p className="text-[10px] text-slate-450">Unlock milestones as you practice</p>
+                      </div>
+                      <Award className="w-5 h-5 text-indigo-400" />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 max-h-[220px] overflow-y-auto pr-1">
+                      {studentDashboardData.badges.length > 0 ? (
+                        studentDashboardData.badges.map((b) => (
+                          <div 
+                            key={b.id} 
+                            className="p-3 bg-slate-950 border border-indigo-950/40 rounded-2xl flex flex-col justify-between text-center relative group overflow-hidden transition-all"
+                          >
+                            <div className="absolute top-0 right-0 w-8 h-8 bg-brand-500/5 rounded-full blur pointer-events-none"></div>
+                            <div className="flex justify-center mb-1">
+                              <Sparkles className="w-7 h-7 text-indigo-400" />
+                            </div>
+                            <h4 className="text-[10px] font-black text-white truncate">{b.badge_name}</h4>
+                            <p className="text-[8px] text-slate-455 line-clamp-2 mt-1 leading-normal">{b.badge_description}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="col-span-2 text-center py-8 text-slate-500 text-xs italic">
+                          Solve practice tests to earn badges!
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-lg space-y-4">
+                  <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                    <div>
+                      <h3 className="text-sm font-black uppercase tracking-wider text-slate-200">My Worksheet Diagnostics Timeline</h3>
+                      <p className="text-[10px] text-slate-455">Review teacher feedback and weekly study plans</p>
+                    </div>
+                    <ClipboardList className="w-5 h-5 text-indigo-400" />
+                  </div>
+
+                  <div className="space-y-4">
+                    {studentDashboardData.assessments.length > 0 ? (
+                      studentDashboardData.assessments.map((a) => (
+                        <div key={a.id} className="p-4 bg-slate-950 border border-slate-850 rounded-2xl space-y-3">
+                          <div className="flex justify-between items-center">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xs font-black text-indigo-300">{a.subject} Test</span>
+                              <span className="text-[9px] text-slate-500 font-mono">
+                                Scanned on: {new Date(a.assessment_date).toLocaleDateString()}
+                              </span>
+                            </div>
+                            <div className="text-xs font-black text-slate-200">
+                              Score: <strong className="text-white text-sm">{a.total_score}</strong> / {a.max_score}
+                            </div>
+                          </div>
+
+                          <p className="text-xs text-slate-400 leading-relaxed italic bg-slate-900/60 p-3 rounded-xl border border-slate-850">
+                            " {a.summary} "
+                          </p>
+
+                          {a.remediation_plan && (
+                            <div className="bg-indigo-950/20 border border-indigo-900/30 p-3.5 rounded-xl text-xs space-y-1.5">
+                              <h4 className="font-extrabold text-indigo-300 flex items-center">
+                                <Sparkles className="w-3.5 h-3.5 mr-1" /> Personalized Remediation Plan
+                              </h4>
+                              <p className="text-slate-350 leading-relaxed">{a.remediation_plan}</p>
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-8 text-slate-500 text-xs italic">
+                        No worksheet scans recorded yet. Gaps will appear when teacher uploads scans.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {studentActiveTab === "practice" && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-lg space-y-4 h-fit">
+                  <div className="border-b border-slate-800 pb-3">
+                    <h3 className="text-sm font-black uppercase tracking-wider text-slate-200">Personalized Practice Hub</h3>
+                    <p className="text-[10px] text-slate-455">Remedial loops mapped to your scanned gaps</p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h4 className="text-[10px] font-black uppercase text-rose-455 tracking-wider">Identified Learning Gaps</h4>
+                    {studentDashboardData?.gaps && studentDashboardData.gaps.length > 0 ? (
+                      <div className="space-y-2">
+                        {studentDashboardData.gaps.map((gap) => (
+                          <button
+                            key={gap.id}
+                            type="button"
+                            onClick={() => handleGenerateQuiz(gap.subject, gap.concept)}
+                            className="w-full p-3.5 bg-slate-950 border border-slate-850 hover:border-indigo-500 hover:bg-slate-900 text-left rounded-2xl transition-all duration-200 flex justify-between items-center group cursor-pointer"
+                          >
+                            <div className="space-y-1 truncate pr-2">
+                              <span className="text-[9px] px-2 py-0.5 rounded-full font-bold bg-slate-800 border border-slate-700 text-slate-400">
+                                {gap.subject}
+                              </span>
+                              <h5 className="text-xs font-black text-white group-hover:text-indigo-400 transition-colors truncate">
+                                {gap.concept}
+                              </h5>
+                            </div>
+                            <span className="text-[10px] px-2 py-0.5 bg-rose-500/10 text-rose-400 font-extrabold rounded-full shrink-0">
+                              Practice
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-6 border border-dashed border-slate-800 rounded-2xl text-slate-500 text-xs italic">
+                        No critical conceptual gaps recorded. Nice job!
+                      </div>
+                    )}
+
+                    <div className="relative flex py-2 items-center">
+                      <div className="flex-grow border-t border-slate-850"></div>
+                      <span className="flex-shrink mx-3 text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+                        Or Practice General
+                      </span>
+                      <div className="flex-grow border-t border-slate-850"></div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => handleGenerateQuiz("Mathematics", "Mathematics General")}
+                        className="py-2.5 bg-slate-950 hover:bg-slate-900 border border-slate-850 hover:border-indigo-500 rounded-2xl text-xs font-bold transition-all text-center cursor-pointer text-indigo-200"
+                      >
+                        Math Quiz
+                      </button>
+                      <button
+                        onClick={() => handleGenerateQuiz("English", "English General")}
+                        className="py-2.5 bg-slate-950 hover:bg-slate-900 border border-slate-850 hover:border-indigo-500 rounded-2xl text-xs font-bold transition-all text-center cursor-pointer text-indigo-200"
+                      >
+                        English Phonics
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-lg min-h-[450px] flex flex-col">
+                  {isGeneratingQuiz ? (
+                    <div className="flex-1 flex flex-col justify-center items-center space-y-3">
+                      <Sparkles className="w-10 h-10 animate-spin text-indigo-400" />
+                      <p className="text-xs text-indigo-200 font-bold animate-pulse text-center">
+                        ClassPulse AI formulation engine generating 5 tailored practice MCQs...
+                      </p>
+                    </div>
+                  ) : studentPracticeQuestions ? (
+                    <div className="flex-1 flex flex-col justify-between">
+                      <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                        <div>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-indigo-500/10 text-indigo-400">
+                            Practice Mode
+                          </span>
+                          <h3 className="text-xs font-extrabold text-white mt-1">Topic: {studentSelectedSubject}</h3>
+                        </div>
+                        <span className="text-xs font-mono text-slate-400">
+                          Question {studentActiveQuestionIndex + 1} of {studentPracticeQuestions.length}
+                        </span>
+                      </div>
+
+                      <div className="my-6 space-y-6 flex-grow">
+                        <div className="bg-slate-950 border border-slate-850 p-6 rounded-2xl">
+                          <h4 className="text-sm font-bold text-white leading-relaxed">
+                            {studentPracticeQuestions[studentActiveQuestionIndex].question}
+                          </h4>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3">
+                          {Object.entries(studentPracticeQuestions[studentActiveQuestionIndex].options).map(([key, optText]) => {
+                            const isSelected = studentAnswers[studentActiveQuestionIndex] === key;
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={() => handleAnswerQuestion(studentActiveQuestionIndex, key)}
+                                className={`w-full p-4 rounded-2xl border text-left text-xs font-semibold transition-all cursor-pointer flex items-center justify-between ${
+                                  isSelected 
+                                    ? "bg-indigo-600 border-indigo-500 text-white shadow-md" 
+                                    : "bg-slate-950 border-slate-850 text-slate-350 hover:bg-slate-900"
+                                }`}
+                              >
+                                <span>{key}) {optText}</span>
+                                {isSelected && <CheckCircle className="w-4 h-4 text-white" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="flex justify-between items-center pt-4 border-t border-slate-800">
+                        <button
+                          type="button"
+                          disabled={studentActiveQuestionIndex === 0}
+                          onClick={() => setStudentActiveQuestionIndex(prev => prev - 1)}
+                          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 rounded-xl text-xs font-bold transition-all text-slate-300 cursor-pointer"
+                        >
+                          Previous
+                        </button>
+
+                        {studentActiveQuestionIndex < studentPracticeQuestions.length - 1 ? (
+                          <button
+                            type="button"
+                            disabled={!studentAnswers[studentActiveQuestionIndex]}
+                            onClick={() => setStudentActiveQuestionIndex(prev => prev + 1)}
+                            className="px-5 py-2 bg-indigo-650 hover:bg-indigo-600 disabled:opacity-40 rounded-xl text-xs font-bold transition-all text-white cursor-pointer"
+                          >
+                            Next Question
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={Object.keys(studentAnswers).length < studentPracticeQuestions.length || isSubmittingQuiz}
+                            onClick={() => handleSubmitQuiz(studentDashboardData?.gaps?.[0]?.concept || "FLN Practice")}
+                            className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 rounded-xl text-xs font-bold transition-all text-white cursor-pointer shadow"
+                          >
+                            {isSubmittingQuiz ? "Evaluating..." : "Evaluate Quiz"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex-1 flex flex-col justify-center items-center text-center space-y-4">
+                      <div className="p-4 bg-indigo-500/10 rounded-full border border-indigo-500/10 text-indigo-400">
+                        <BookOpen className="w-12 h-12 animate-pulse" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-white">Select a Learning Gap to Practice</h4>
+                        <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 leading-normal">
+                          Choose an identified gap card on the left panel, or click one of the general subjects.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </main>
+        )}
+
+        {showQuizResultModal && studentQuizScore !== null && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 text-center animate-scale-up">
+              <div className="space-y-2">
+                <div className="inline-flex p-4 bg-emerald-500/10 text-emerald-400 rounded-3xl border border-emerald-500/20">
+                  <Award className="w-10 h-10 animate-bounce" />
+                </div>
+                <h2 className="text-xl font-black text-white">Remedial Quiz Evaluated!</h2>
+                <p className="text-xs text-slate-450">Performance metrics updated successfully</p>
+              </div>
+
+              <div className="bg-slate-950 border border-slate-850 p-4 rounded-2xl max-w-xs mx-auto">
+                <p className="text-[10px] font-black uppercase text-slate-550 tracking-wider">Your Score</p>
+                <h3 className="text-4xl font-black text-emerald-400 my-1">{studentQuizScore.toFixed(0)} <span className="text-base font-bold text-slate-550">/ 10</span></h3>
+                <p className="text-[11px] font-bold text-slate-350">
+                  {studentQuizScore >= 8.0 ? "🌟 Brilliant! Highly developed mastery." :
+                   studentQuizScore >= 6.0 ? "👍 Good effort! Review the explanations." :
+                   "💪 Keep practicing to improve!"}
+                </p>
+              </div>
+
+              <div className="space-y-3 text-left max-h-40 overflow-y-auto pr-1 border-t border-b border-slate-850 py-3">
+                {studentPracticeQuestions.map((q, idx) => {
+                  const isCorrect = studentAnswers[idx] === q.correct_option;
+                  return (
+                    <div key={idx} className="p-3 bg-slate-950/50 rounded-xl border border-slate-850 text-[11px] space-y-1">
+                      <div className="flex justify-between font-bold">
+                        <span className="text-slate-200">Q{idx+1}: {q.question}</span>
+                        <span className={isCorrect ? "text-emerald-400" : "text-rose-400"}>
+                          {isCorrect ? "Correct" : "Incorrect"}
+                        </span>
+                      </div>
+                      <p className="text-indigo-200/90 leading-relaxed font-medium bg-indigo-950/20 p-2 rounded-lg border border-indigo-950/30">
+                        {q.explanation}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowQuizResultModal(false);
+                  setStudentPracticeQuestions(null);
+                  setStudentAnswers({});
+                  setStudentQuizScore(null);
+                  setStudentActiveTab("dashboard");
+                }}
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-650 text-white rounded-xl text-xs font-bold transition-all shadow cursor-pointer"
+              >
+                Back to My Dashboard
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  if (portalMode === "student") {
+    return renderStudentPortal();
+  }
 
   return (
     <>
@@ -814,6 +1650,18 @@ function App() {
             >
               <BarChart3 className="w-5 h-5" />
               <span>Class Performance Trends</span>
+            </button>
+            <button 
+              onClick={() => {
+                setPortalMode("student");
+                setStudentSession(null);
+                setStudentRollNumberInput("");
+                setStudentPasswordInput("");
+              }}
+              className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all bg-gradient-to-r from-purple-650 to-indigo-650 text-white shadow-md hover:from-purple-750 hover:to-indigo-750 mt-4 border border-purple-500/20"
+            >
+              <Users className="w-5 h-5" />
+              <span>Switch to Student Portal</span>
             </button>
           </nav>
         </div>

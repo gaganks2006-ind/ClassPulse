@@ -386,3 +386,360 @@ def get_premium_mock_diagnostic(subject, grade):
             ]
         }
 
+
+def generate_practice_mcqs(concept, subject):
+    """
+    Generates 5 personalized practice multiple-choice questions targeting a specific learning gap.
+    Uses Gemini if configured, else falls back to offline MCQs.
+    """
+    prompt = f"""
+    You are an expert educational assessment designer. Generate a set of 5 multiple-choice questions (MCQs) to help a student practice and master the following concept:
+    Subject: {subject}
+    Concept: {concept}
+
+    Guidelines:
+    1. Each question must have 4 options: A, B, C, and D.
+    2. Exactly one option must be the correct answer.
+    3. Include a detailed, clear explanation for the correct answer. The explanation should be in simple, supportive language, ideally bilingual/Hinglish (English mixed with Hindi terms) where appropriate to make it relatable and easy to understand.
+    4. Make the questions engaging, relevant to everyday life, and suitable for the student's level.
+
+    Return the response as a strict JSON array of 5 objects only. Each object must have these exact keys:
+    - "question": "The question text"
+    - "options": {{
+        "A": "Option A text",
+        "B": "Option B text",
+        "C": "Option C text",
+        "D": "Option D text"
+      }}
+    - "correct_option": "A" (or "B", "C", "D")
+    - "explanation": "Detailed explanation of the correct choice."
+
+    Ensure the response is valid JSON and does not contain any markdown wrappers like ```json.
+    """
+    if HAS_GENAI and GEMINI_API_KEY:
+        try:
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            response = model.generate_content(prompt)
+            response_text = response.text.strip()
+            if response_text.startswith("```json"):
+                response_text = response_text[7:]
+            if response_text.endswith("```"):
+                response_text = response_text[:-3]
+            response_text = response_text.strip()
+            
+            parsed_json = json.loads(response_text)
+            if isinstance(parsed_json, list) and len(parsed_json) > 0:
+                return parsed_json
+        except Exception as e:
+            print(f"Gemini API MCQ generation failed: {e}. Falling back to offline questions.")
+    
+    return get_offline_mcq_fallback(concept, subject)
+
+
+def get_offline_mcq_fallback(concept, subject):
+    """
+    Provides pre-defined sets of 5 practice MCQs based on the subject and concept.
+    """
+    concept_lower = concept.lower()
+    
+    # 1. Math - Double-digit Addition with Carry
+    if "carry" in concept_lower or "addition" in concept_lower:
+        return [
+            {
+                "question": "What is 28 + 15?",
+                "options": {
+                    "A": "33",
+                    "B": "43",
+                    "C": "38",
+                    "D": "48"
+                },
+                "correct_option": "B",
+                "explanation": "Pehle ones place ke numbers ko add karo: 8 + 5 = 13. Write 3 in ones place and carry 1 to the tens place. Ab tens place ko add karo: 2 + 1 + 1 (carry) = 4. Correct answer is 43!"
+            },
+            {
+                "question": "Rahul has 37 marbles. Amit gives him 16 more. How many marbles does Rahul have now?",
+                "options": {
+                    "A": "43",
+                    "B": "53",
+                    "C": "47",
+                    "D": "50"
+                },
+                "correct_option": "B",
+                "explanation": "37 + 16 = 53. 7 + 6 is 13, so carry over 1. 3 + 1 + 1 (carry) is 5."
+            },
+            {
+                "question": "What is 49 + 25?",
+                "options": {
+                    "A": "64",
+                    "B": "74",
+                    "C": "70",
+                    "D": "69"
+                },
+                "correct_option": "B",
+                "explanation": "49 + 25 = 74. Adding 9 + 5 gives 14, write 4 in ones and carry over 1. Adding tens: 4 + 2 + 1 (carry) = 7."
+            },
+            {
+                "question": "Fill in the blank: 56 + 18 = __",
+                "options": {
+                    "A": "64",
+                    "B": "72",
+                    "C": "74",
+                    "D": "68"
+                },
+                "correct_option": "C",
+                "explanation": "56 + 18 = 74. Don't forget to carry over 1 to tens column!"
+            },
+            {
+                "question": "If you add 65 and 27, what digit will be in the tens place of the answer?",
+                "options": {
+                    "A": "8",
+                    "B": "9",
+                    "C": "2",
+                    "D": "7"
+                },
+                "correct_option": "B",
+                "explanation": "65 + 27 = 92. The digit in the tens place is 9. (5+7=12, carry 1; 6+2+1=9)."
+            }
+        ]
+        
+    # 2. Math - Subtraction Borrowing Across Zero
+    elif "borrow" in concept_lower or "subtraction" in concept_lower or "zero" in concept_lower:
+        return [
+            {
+                "question": "What is 50 - 24?",
+                "options": {
+                    "A": "36",
+                    "B": "26",
+                    "C": "34",
+                    "D": "24"
+                },
+                "correct_option": "B",
+                "explanation": "Pehle ones place dekho: 0 me se 4 subtract nahi ho sakta. So borrow 1 from tens place. Now ones place becomes 10 (10 - 4 = 6). Tens place becomes 4 (4 - 2 = 2). Answer is 26!"
+            },
+            {
+                "question": "Solve: 80 - 47 = __",
+                "options": {
+                    "A": "43",
+                    "B": "37",
+                    "C": "33",
+                    "D": "47"
+                },
+                "correct_option": "C",
+                "explanation": "80 - 47 = 33. We borrow from the 8 tens, making it 10 ones. 10 - 7 = 3, and 7 tens remaining - 4 tens = 3 tens."
+            },
+            {
+                "question": "Sita had 60 rupees. She bought a notebook for 38 rupees. How much money is left with her?",
+                "options": {
+                    "A": "32 Rupees",
+                    "B": "28 Rupees",
+                    "C": "22 Rupees",
+                    "D": "38 Rupees"
+                },
+                "correct_option": "C",
+                "explanation": "60 - 38 = 22. Borrowing 1 ten makes it 10 - 8 = 2. Remaining 5 tens - 3 tens = 2 tens. So, 22 rupees!"
+            },
+            {
+                "question": "When solving 40 - 15, we must borrow from which column?",
+                "options": {
+                    "A": "Ones column",
+                    "B": "Tens column",
+                    "C": "Hundreds column",
+                    "D": "No borrowing needed"
+                },
+                "correct_option": "B",
+                "explanation": "We borrow 1 ten from the tens column because 0 in the ones place is smaller than 5."
+            },
+            {
+                "question": "What is 90 - 58?",
+                "options": {
+                    "A": "42",
+                    "B": "32",
+                    "C": "38",
+                    "D": "48"
+                },
+                "correct_option": "B",
+                "explanation": "90 - 58 = 32. 10 - 8 = 2. 8 tens - 5 tens = 3 tens."
+            }
+        ]
+        
+    # 3. English - Phonics / Consonant Blend
+    elif "blend" in concept_lower or "consonant" in concept_lower or "sound" in concept_lower or "phonics" in concept_lower:
+        return [
+            {
+                "question": "Which word starts with the consonant blend 'BR'?",
+                "options": {
+                    "A": "Back",
+                    "B": "Brush",
+                    "C": "Bark",
+                    "D": "Boat"
+                },
+                "correct_option": "B",
+                "explanation": "The word 'Brush' starts with 'BR' blend where we pronounce both 'b' and 'r' sounds together rapidly (br-ush)."
+            },
+            {
+                "question": "Complete the word: 'The star shines ___ight.'",
+                "options": {
+                    "A": "bl",
+                    "B": "cl",
+                    "C": "br",
+                    "D": "fl"
+                },
+                "correct_option": "C",
+                "explanation": "The correct blend is 'br', making the word 'bright'."
+            },
+            {
+                "question": "What blend do you hear at the start of 'Frog'?",
+                "options": {
+                    "A": "Fl",
+                    "B": "Fr",
+                    "C": "Fg",
+                    "D": "Fo"
+                },
+                "correct_option": "B",
+                "explanation": "'Frog' starts with 'FR' (fr-og). Both 'f' and 'r' blend together."
+            },
+            {
+                "question": "Find the word that has a blend at the end:",
+                "options": {
+                    "A": "Star",
+                    "B": "Sand",
+                    "C": "Sing",
+                    "D": "Ship"
+                },
+                "correct_option": "B",
+                "explanation": "'Sand' has the consonant blend 'ND' at the end (s-a-n-d)."
+            },
+            {
+                "question": "Identify the word that does NOT contain a blend:",
+                "options": {
+                    "A": "Blue",
+                    "B": "Stop",
+                    "C": "Cat",
+                    "D": "Play"
+                },
+                "correct_option": "C",
+                "explanation": "'Cat' has simple single consonant and vowel sounds (C-A-T), no consonant blends."
+            }
+        ]
+        
+    # 4. English - Sight Word Recognition
+    elif "sight" in concept_lower or "word" in concept_lower:
+        return [
+            {
+                "question": "Which of the following is a common grade-level sight word?",
+                "options": {
+                    "A": "Elephant",
+                    "B": "Because",
+                    "C": "Extremely",
+                    "D": "Computer"
+                },
+                "correct_option": "B",
+                "explanation": "'Because' is a high-frequency sight word that students should recognize instantly by sight rather than sounding it out."
+            },
+            {
+                "question": "Fill in the blank with the correct sight word: 'I went ___ the park.'",
+                "options": {
+                    "A": "too",
+                    "B": "to",
+                    "C": "two",
+                    "D": "tow"
+                },
+                "correct_option": "B",
+                "explanation": "'To' is the correct preposition sight word here."
+            },
+            {
+                "question": "What sight word fits best: 'We ___ playing in the garden yesterday.'",
+                "options": {
+                    "A": "was",
+                    "B": "were",
+                    "C": "are",
+                    "D": "am"
+                },
+                "correct_option": "B",
+                "explanation": "'Were' is the past-tense plural sight word matching 'We'."
+            },
+            {
+                "question": "Choose the correctly spelled sight word meaning 'their position/location':",
+                "options": {
+                    "A": "Their",
+                    "B": "There",
+                    "C": "They're",
+                    "D": "Thare"
+                },
+                "correct_option": "B",
+                "explanation": "'There' refers to place or position (e.g. 'Look over there')."
+            },
+            {
+                "question": "Identify the sight word that completes: 'She has ___ books than me.'",
+                "options": {
+                    "A": "some",
+                    "B": "more",
+                    "C": "many",
+                    "D": "much"
+                },
+                "correct_option": "B",
+                "explanation": "'More' is a comparative sight word used to show a larger quantity."
+            }
+        ]
+        
+    # 5. Default Fallback - General Practice MCQ
+    else:
+        return [
+            {
+                "question": f"Which of the following is most related to '{concept}'?",
+                "options": {
+                    "A": "Applying correct rules and processes",
+                    "B": "Ignoring guidelines completely",
+                    "C": "Guessing without reading",
+                    "D": "Copying from friends"
+                },
+                "correct_option": "A",
+                "explanation": "To master any educational concept like this, practicing the underlying rules and processes is key."
+            },
+            {
+                "question": f"Why is understanding '{concept}' important?",
+                "options": {
+                    "A": "It builds a foundation for advanced topics",
+                    "B": "It has no practical use",
+                    "C": "Only to score marks in exams",
+                    "D": "To memorize facts"
+                },
+                "correct_option": "A",
+                "explanation": "Every basic concept creates a baseline structure or foundation that makes learning harder topics much easier."
+            },
+            {
+                "question": "What is the best way to improve when we make mistakes in this topic?",
+                "options": {
+                    "A": "Give up immediately",
+                    "B": "Do more practice questions and read explanations",
+                    "C": "Hide the test scores",
+                    "D": "Blame the calculator"
+                },
+                "correct_option": "B",
+                "explanation": "Practice with detailed feedback is proven to turn conceptual gaps into learning masteries."
+            },
+            {
+                "question": "True or False: We can learn this concept through daily real-world activities.",
+                "options": {
+                    "A": "True, learning happens everywhere",
+                    "B": "False, it only exists in books",
+                    "C": "True, but only during examinations",
+                    "D": "False, learning is only for school"
+                },
+                "correct_option": "A",
+                "explanation": "NEP 2020 promotes context-based, play-based, and active real-world applications of FLN concepts."
+            },
+            {
+                "question": "Fill in the blank: Mastery in this subject comes from ________.",
+                "options": {
+                    "A": "Daily consistent study and revision",
+                    "B": "Studying only one day before final test",
+                    "C": "Avoiding questions we find hard",
+                    "D": "Skipping school classes"
+                },
+                "correct_option": "A",
+                "explanation": "Regular practice and small daily milestones help us achieve long-term learning goals."
+            }
+        ]
+
+

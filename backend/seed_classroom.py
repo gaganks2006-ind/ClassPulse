@@ -24,10 +24,10 @@ def seed_db():
     # 2. Seed Collaborating Users (The 5 team members)
     print("Seeding 5 active team members...")
     team_members = [
-        (1, "Aarav Sharma", "aarav@shiksha.org", "Lead Educator", "Active", "https://api.dicebear.com/7.x/adventurer/svg?seed=Aarav"),
-        (2, "Priya Patel", "priya@shiksha.org", "Co-Teacher", "Active", "https://api.dicebear.com/7.x/adventurer/svg?seed=Priya"),
-        (3, "Gagan K S", "gagan@shiksha.org", "Assessor", "Active", "https://api.dicebear.com/7.x/adventurer/svg?seed=Gagan"),
-        (4, "Meera Nair", "meera@shiksha.org", "Special Educator", "Offline", "https://api.dicebear.com/7.x/adventurer/svg?seed=Meera"),
+        (1, "Aarav Sharma", "aarav@shiksha.org", "Class Teacher", "Active", "https://api.dicebear.com/7.x/adventurer/svg?seed=Aarav"),
+        (2, "Priya Patel", "priya@shiksha.org", "Class Teacher", "Active", "https://api.dicebear.com/7.x/adventurer/svg?seed=Priya"),
+        (3, "Gagan K S", "gagan@shiksha.org", "Subject Teacher", "Active", "https://api.dicebear.com/7.x/adventurer/svg?seed=Gagan"),
+        (4, "Meera Nair", "meera@shiksha.org", "Subject Teacher", "Offline", "https://api.dicebear.com/7.x/adventurer/svg?seed=Meera"),
         (5, "Vikram Singh", "vikram@shiksha.org", "School Principal", "Offline", "https://api.dicebear.com/7.x/adventurer/svg?seed=Vikram")
     ]
     cursor.executemany("""

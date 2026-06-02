@@ -172,6 +172,33 @@ def init_db():
             FOREIGN KEY (flagged_by_user_id) REFERENCES users(id)
         )
     """)
+
+    # 12. Student Goals Table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS student_goals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            subject TEXT NOT NULL,
+            target_score REAL NOT NULL,
+            current_progress REAL DEFAULT 0.0,
+            status TEXT DEFAULT 'In Progress',
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (student_id) REFERENCES students(id)
+        )
+    """)
+
+    # 13. Student Badges Table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS student_badges (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            badge_name TEXT NOT NULL,
+            badge_description TEXT,
+            awarded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (student_id) REFERENCES students(id),
+            UNIQUE(student_id, badge_name)
+        )
+    """)
     
     # Seed collaborating team members with cleaned RBAC roles (includes mock parents)
     cursor.execute("SELECT COUNT(*) FROM users")
@@ -318,6 +345,33 @@ def init_db():
                 (1, 1, 'comment', "Chirag, let's review Rahul's double-digit math worksheets together. We need to assign Rathik to run a customized 1-on-1 tutoring session."),
                 (2, 1, 'comment', "I checked the EWS dashboard. I've initiated a Home Visit plan with the parents to discuss Rahul's attendance drop.")
             ])
+
+        # Seed student goals
+        cursor.execute("SELECT COUNT(*) FROM student_goals")
+        if cursor.fetchone()[0] == 0:
+            mock_goals = [
+                (1, "Mathematics", 9.0, 7.5, "In Progress"),
+                (1, "English", 8.5, 6.0, "In Progress"),
+                (2, "Mathematics", 9.5, 9.6, "Achieved"),
+            ]
+            cursor.executemany("""
+                INSERT INTO student_goals (student_id, subject, target_score, current_progress, status)
+                VALUES (?, ?, ?, ?, ?)
+            """, mock_goals)
+
+        # Seed student badges
+        cursor.execute("SELECT COUNT(*) FROM student_badges")
+        if cursor.fetchone()[0] == 0:
+            mock_badges = [
+                (1, "Goal Setter", "Set your first learning target"),
+                (1, "Practice Champion", "Completed a practice quiz with a passing score"),
+                (2, "Goal Setter", "Set your first learning target"),
+                (2, "FLN Star", "Achieved excellent mastery score in FLN concepts"),
+            ]
+            cursor.executemany("""
+                INSERT INTO student_badges (student_id, badge_name, badge_description)
+                VALUES (?, ?, ?)
+            """, mock_badges)
         
     conn.commit()
     conn.close()
