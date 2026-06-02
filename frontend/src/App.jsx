@@ -1189,30 +1189,30 @@ function App() {
     }
 
     return (
-      <div className="min-h-screen bg-[#0b1009] text-slate-100 flex flex-col font-sans relative overflow-hidden">
-        {/* Signature 'Jade pebble morning' studio light projections */}
-        <div className="absolute left-[-10%] top-[25%] w-[500px] h-[500px] bg-gradient-to-br from-[#7B9669]/15 to-[#BAC8B1]/2 rounded-full blur-[120px] pointer-events-none z-0 animate-pulse" style={{ animationDuration: '8s' }} />
-        <div className="absolute right-[-10%] top-[10%] w-[550px] h-[550px] bg-gradient-to-bl from-[#6C8480]/18 to-[#BAC8B1]/2 rounded-full blur-[130px] pointer-events-none z-0" />
-        <div className="absolute bottom-0 left-[20%] w-[35%] h-[20%] bg-gradient-to-b from-[#7B9669]/6 to-transparent blur-md pointer-events-none z-0" />
-        <div className="absolute bottom-0 right-[25%] w-[25%] h-[20%] bg-gradient-to-b from-[#6C8480]/6 to-transparent blur-md pointer-events-none z-0" />
-        <header className="h-16 bg-slate-900 border-b border-slate-800 px-6 flex items-center justify-between shadow-xl sticky top-0 z-30">
+      <div className="min-h-screen bg-[#f4f6f3] text-slate-800 flex flex-col font-sans relative overflow-hidden">
+        {/* Signature 'Jade pebble morning' Light Mode studio light projections */}
+        <div className="absolute left-[-10%] top-[25%] w-[500px] h-[500px] bg-gradient-to-br from-[#7B9669]/10 to-[#BAC8B1]/3 rounded-full blur-[120px] pointer-events-none z-0 animate-pulse" style={{ animationDuration: '8s' }} />
+        <div className="absolute right-[-10%] top-[10%] w-[550px] h-[550px] bg-gradient-to-bl from-[#6C8480]/8 to-[#BAC8B1]/2 rounded-full blur-[130px] pointer-events-none z-0" />
+        <div className="absolute bottom-0 left-[20%] w-[35%] h-[20%] bg-gradient-to-b from-[#7B9669]/5 to-transparent blur-md pointer-events-none z-0" />
+        <div className="absolute bottom-0 right-[25%] w-[25%] h-[20%] bg-gradient-to-b from-[#6C8480]/5 to-transparent blur-md pointer-events-none z-0" />
+        <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200/60 px-6 flex items-center justify-between shadow-sm sticky top-0 z-30">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-xl border border-indigo-500/20">
+            <div className="p-2 bg-[#7B9669]/10 text-[#404E3B] rounded-xl border border-[#7B9669]/20">
               <Sparkles className="w-5 h-5 animate-pulse" />
             </div>
             <div>
-              <span className="text-xs text-indigo-400 font-extrabold uppercase tracking-widest">Student Portal</span>
-              <h1 className="text-base font-black text-white leading-none">{studentSession.name}</h1>
+              <span className="text-xs text-[#7B9669] font-extrabold uppercase tracking-widest leading-none block mb-0.5">Student Portal</span>
+              <h1 className="text-base font-black text-slate-850 leading-none">{studentSession.name}</h1>
             </div>
           </div>
 
-          <div className="flex bg-slate-950 p-1 rounded-2xl border border-slate-850 space-x-1">
+          <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 space-x-1">
             <button
               onClick={() => setStudentActiveTab("dashboard")}
               className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 studentActiveTab === "dashboard"
-                  ? "bg-indigo-600 text-white shadow"
-                  : "text-slate-400 hover:text-white"
+                  ? "bg-[#7B9669] text-white shadow"
+                  : "text-slate-500 hover:text-slate-800"
               }`}
             >
               📊 My Dashboard
@@ -1227,8 +1227,8 @@ function App() {
               }}
               className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 studentActiveTab === "practice"
-                  ? "bg-indigo-600 text-white shadow"
-                  : "text-slate-400 hover:text-white"
+                  ? "bg-[#7B9669] text-white shadow"
+                  : "text-slate-500 hover:text-slate-800"
               }`}
             >
               🧠 AI Practice Room
@@ -1236,12 +1236,12 @@ function App() {
           </div>
 
           <div className="flex items-center space-x-3">
-            <span className="text-[10px] px-2.5 py-1 rounded-full font-bold bg-slate-800 border border-slate-700 text-slate-300">
+            <span className="text-[10px] px-2.5 py-1 rounded-full font-bold bg-slate-100 border border-slate-200 text-slate-650">
               Roll: {studentSession.roll_number} • {studentSession.grade}
             </span>
             <button
               onClick={handleStudentLogout}
-              className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+              className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
             >
               Exit Portal
             </button>
@@ -1757,38 +1757,38 @@ function App() {
     ];
 
     return (
-      <div className="bg-[#0b1009] min-h-screen relative overflow-hidden flex flex-col justify-center items-center p-4 md:p-8 font-sans select-none">
-        {/* Signature 'Jade pebble morning' studio light projections */}
+      <div className="bg-[#f4f6f3] min-h-screen relative overflow-hidden flex flex-col justify-center items-center p-4 md:p-8 font-sans select-none">
+        {/* Signature 'Jade pebble morning' Light Mode studio light projections */}
         
-        {/* Left glowing mint-jade spotlight */}
-        <div className="absolute left-[-15%] top-[30%] w-[600px] h-[600px] bg-gradient-to-br from-[#7B9669]/25 to-[#BAC8B1]/5 rounded-full blur-[130px] pointer-events-none z-0 animate-pulse" style={{ animationDuration: '6s' }} />
+        {/* Left glowing mint-jade spotlight - subtle bright overlay */}
+        <div className="absolute left-[-15%] top-[20%] w-[600px] h-[600px] bg-gradient-to-br from-[#7B9669]/10 to-[#BAC8B1]/4 rounded-full blur-[130px] pointer-events-none z-0" />
         
         {/* Right glowing muted sage/slate spotlight */}
-        <div className="absolute right-[-10%] top-[-10%] w-[650px] h-[650px] bg-gradient-to-bl from-[#6C8480]/30 to-[#BAC8B1]/5 rounded-full blur-[140px] pointer-events-none z-0" />
+        <div className="absolute right-[-10%] top-[-10%] w-[650px] h-[650px] bg-gradient-to-bl from-[#6C8480]/8 to-[#BAC8B1]/2 rounded-full blur-[140px] pointer-events-none z-0" />
 
         {/* Ambient bottom floor light floor reflection */}
-        <div className="absolute bottom-0 left-0 right-0 h-[22%] bg-gradient-to-t from-[#040803] via-[#091007]/90 to-[#0b1009]/10 pointer-events-none z-0" />
+        <div className="absolute bottom-0 left-0 right-0 h-[22%] bg-gradient-to-t from-[#E6E6E6] via-[#BAC8B1]/20 to-[#f4f6f3]/10 pointer-events-none z-0" />
         
         {/* Glowing floor horizon separator line */}
-        <div className="absolute bottom-[22%] left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#7B9669]/50 to-transparent shadow-[0_0_20px_rgba(123,150,105,0.45)] pointer-events-none z-0" />
+        <div className="absolute bottom-[22%] left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#7B9669]/25 to-transparent shadow-[0_0_15px_rgba(123,150,105,0.15)] pointer-events-none z-0" />
 
         {/* Diffused reflective floor spotlights */}
-        <div className="absolute bottom-0 left-[10%] w-[45%] h-[22%] bg-gradient-to-b from-[#7B9669]/10 to-transparent blur-md pointer-events-none z-0" />
-        <div className="absolute bottom-0 right-[15%] w-[35%] h-[22%] bg-gradient-to-b from-[#6C8480]/10 to-transparent blur-md pointer-events-none z-0" />
+        <div className="absolute bottom-0 left-[10%] w-[45%] h-[22%] bg-gradient-to-b from-[#7B9669]/6 to-transparent blur-md pointer-events-none z-0" />
+        <div className="absolute bottom-0 right-[15%] w-[35%] h-[22%] bg-gradient-to-b from-[#6C8480]/6 to-transparent blur-md pointer-events-none z-0" />
 
         <div className="max-w-xl w-full z-10 space-y-6">
-          {/* Frosted glassmorphic card */}
-          <div className="bg-white/5 backdrop-blur-2xl border border-white/10 rounded-3xl p-8 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] space-y-6 text-white transition-all duration-300">
+          {/* Frosted light-glassmorphic card */}
+          <div className="bg-white/85 backdrop-blur-2xl border border-white rounded-3xl p-8 shadow-[0_8px_32px_rgba(123,150,105,0.1)] space-y-6 text-slate-800 transition-all duration-300">
             
             {/* Header section with premium AI Sparks logo */}
             <div className="text-center space-y-3">
-              <div className="inline-flex p-3 bg-indigo-500/20 text-indigo-300 rounded-2xl border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.2)]">
-                <Sparkles className="w-8 h-8 animate-pulse" />
+              <div className="inline-flex p-3 bg-[#7B9669]/10 text-[#404E3B] rounded-2xl border border-[#7B9669]/20 shadow-sm">
+                <Sparkles className="w-8 h-8" />
               </div>
-              <h1 className="text-3xl font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-indigo-200 via-purple-250 to-pink-200 uppercase">
+              <h1 className="text-3xl font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-[#404E3B] via-[#7B9669] to-[#6C8480] uppercase">
                 ClassPulse
               </h1>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">
+              <p className="text-[10px] text-[#6C8480] font-black uppercase tracking-widest leading-none">
                 Unified Learning ERP & EWS Radar
               </p>
             </div>
@@ -1796,18 +1796,18 @@ function App() {
             {/* Login form */}
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               {loginErrorMsg && (
-                <div className="bg-rose-500/20 border border-rose-500/40 text-rose-250 px-4 py-3 rounded-2xl text-xs font-bold text-center">
+                <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-2xl text-xs font-bold text-center">
                   {loginErrorMsg}
                 </div>
               )}
 
               <div className="space-y-1.5">
-                <label className="block text-[10px] font-black uppercase text-indigo-300 tracking-wider">
+                <label className="block text-[10px] font-black uppercase text-[#404E3B] tracking-wider">
                   Username / Unique ID / Email / Roll No
                 </label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
-                    <User className="w-4 h-4" />
+                    <User className="w-4 h-4 text-[#6C8480]" />
                   </span>
                   <input
                     type="text"
@@ -1815,20 +1815,20 @@ function App() {
                     placeholder="e.g. gagan@shiksha.org or G3-01"
                     value={loginUsernameInput}
                     onChange={(e) => setLoginUsernameInput(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-slate-950/40 border border-white/10 focus:border-indigo-400 focus:bg-slate-950/60 rounded-2xl text-sm text-white placeholder-slate-500 outline-none transition-all duration-200"
+                    className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200/80 focus:border-[#7B9669] focus:ring-2 focus:ring-[#7B9669]/10 rounded-2xl text-sm text-slate-800 placeholder-slate-400 outline-none transition-all duration-200 shadow-sm"
                   />
                 </div>
               </div>
 
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <label className="block text-[10px] font-black uppercase text-indigo-300 tracking-wider">
+                  <label className="block text-[10px] font-black uppercase text-[#404E3B] tracking-wider">
                     Password
                   </label>
                 </div>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 text-[#6C8480]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                     </svg>
                   </span>
@@ -1838,7 +1838,7 @@ function App() {
                     placeholder="••••••••"
                     value={loginPasswordInput}
                     onChange={(e) => setLoginPasswordInput(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-slate-950/40 border border-white/10 focus:border-indigo-400 focus:bg-slate-950/60 rounded-2xl text-sm text-white placeholder-slate-500 outline-none transition-all duration-200"
+                    className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200/80 focus:border-[#7B9669] focus:ring-2 focus:ring-[#7B9669]/10 rounded-2xl text-sm text-slate-800 placeholder-slate-400 outline-none transition-all duration-200 shadow-sm"
                   />
                 </div>
               </div>
@@ -1846,7 +1846,7 @@ function App() {
               <button
                 type="submit"
                 disabled={isLoggingIn}
-                className="w-full py-3.5 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-2xl text-xs font-black tracking-wider uppercase shadow-xl shadow-indigo-950/50 hover:shadow-indigo-500/25 active:scale-98 disabled:opacity-55 disabled:cursor-not-allowed transition-all duration-200 cursor-pointer"
+                className="w-full py-3.5 bg-gradient-to-r from-[#7B9669] to-[#404E3B] hover:from-[#647B54] hover:to-[#333F2F] text-white rounded-2xl text-xs font-black tracking-wider uppercase shadow-md active:scale-98 disabled:opacity-55 disabled:cursor-not-allowed transition-all duration-200 cursor-pointer"
               >
                 {isLoggingIn ? (
                   <div className="flex items-center justify-center space-x-2">
@@ -1863,10 +1863,10 @@ function App() {
           {/* Quick Demo Accounts Selector Deck */}
           <div className="space-y-3">
             <div className="flex items-center justify-between px-1">
-              <h3 className="text-xs font-black uppercase tracking-wider text-indigo-300">
+              <h3 className="text-xs font-black uppercase tracking-wider text-[#404E3B]">
                 Quick Demo Accounts Selector
               </h3>
-              <span className="text-[9px] px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 font-bold border border-indigo-500/20">
+              <span className="text-[9px] px-2 py-0.5 rounded bg-[#7B9669]/10 text-[#404E3B] font-bold border border-[#7B9669]/20 shadow-sm">
                 Evaluation Deck
               </span>
             </div>
@@ -1878,23 +1878,23 @@ function App() {
                   type="button"
                   onClick={() => handleQuickDemoLogin(acc.username, acc.password)}
                   disabled={isLoggingIn}
-                  className="bg-white/5 hover:bg-white/10 active:scale-98 border border-white/10 rounded-2xl p-3 flex items-start space-x-3 text-left transition-all duration-200 group cursor-pointer"
+                  className="bg-white/70 hover:bg-white active:scale-98 border border-slate-200/80 rounded-2xl p-3 flex items-start space-x-3 text-left transition-all duration-200 group shadow-sm hover:shadow-md cursor-pointer"
                 >
                   <img
                     src={acc.avatar}
                     alt={acc.name}
-                    className="w-9 h-9 rounded-full bg-slate-900 border border-white/10 group-hover:border-indigo-400 transition-colors flex-shrink-0"
+                    className="w-9 h-9 rounded-full bg-[#BAC8B1]/20 border border-slate-200 group-hover:border-[#7B9669] transition-colors flex-shrink-0"
                   />
                   <div className="truncate">
                     <div className="flex items-center space-x-1.5">
-                      <span className="text-[10px] font-black uppercase text-brand-300 tracking-wider">
+                      <span className="text-[10px] font-black uppercase text-[#404E3B] tracking-wider">
                         {acc.role}
                       </span>
                     </div>
-                    <h4 className="text-xs font-bold text-white leading-tight mt-0.5 truncate">
+                    <h4 className="text-xs font-bold text-slate-800 leading-tight mt-0.5 truncate">
                       {acc.name}
                     </h4>
-                    <p className="text-[9px] text-slate-455 mt-1 line-clamp-1 group-hover:text-slate-300 transition-colors">
+                    <p className="text-[9px] text-[#6C8480] mt-1 line-clamp-1 group-hover:text-slate-700 transition-colors">
                       {acc.desc}
                     </p>
                   </div>
@@ -1917,18 +1917,18 @@ function App() {
 
   return (
     <>
-      <div className={`flex h-screen bg-[#0b1009] overflow-hidden text-slate-800 relative ${showWorksheetModal ? 'no-print' : ''}`}>
-        {/* Signature 'Jade pebble morning' studio light projections */}
-        <div className="absolute left-[-10%] top-[25%] w-[500px] h-[500px] bg-gradient-to-br from-[#7B9669]/15 to-[#BAC8B1]/2 rounded-full blur-[120px] pointer-events-none z-0 animate-pulse" style={{ animationDuration: '8s' }} />
-        <div className="absolute right-[-10%] top-[10%] w-[550px] h-[550px] bg-gradient-to-bl from-[#6C8480]/18 to-[#BAC8B1]/2 rounded-full blur-[130px] pointer-events-none z-0" />
-        <div className="absolute bottom-0 left-[20%] w-[35%] h-[20%] bg-gradient-to-b from-[#7B9669]/6 to-transparent blur-md pointer-events-none z-0" />
-        <div className="absolute bottom-0 right-[25%] w-[25%] h-[20%] bg-gradient-to-b from-[#6C8480]/6 to-transparent blur-md pointer-events-none z-0" />
+      <div className={`flex h-screen bg-[#f4f6f3] overflow-hidden text-slate-800 relative ${showWorksheetModal ? 'no-print' : ''}`}>
+        {/* Signature 'Jade pebble morning' Light Mode studio light projections */}
+        <div className="absolute left-[-10%] top-[25%] w-[500px] h-[500px] bg-gradient-to-br from-[#7B9669]/10 to-[#BAC8B1]/3 rounded-full blur-[120px] pointer-events-none z-0 animate-pulse" style={{ animationDuration: '8s' }} />
+        <div className="absolute right-[-10%] top-[10%] w-[550px] h-[550px] bg-gradient-to-bl from-[#6C8480]/8 to-[#BAC8B1]/2 rounded-full blur-[130px] pointer-events-none z-0" />
+        <div className="absolute bottom-0 left-[20%] w-[35%] h-[20%] bg-gradient-to-b from-[#7B9669]/5 to-transparent blur-md pointer-events-none z-0" />
+        <div className="absolute bottom-0 right-[25%] w-[25%] h-[20%] bg-gradient-to-b from-[#6C8480]/5 to-transparent blur-md pointer-events-none z-0" />
       
       {/* 1. Sidebar Navigation */}
-      <aside className="hidden md:flex w-64 bg-indigo-950/90 backdrop-blur-2xl text-slate-300 flex-col justify-between shadow-2xl border-r border-indigo-900/50 print:hidden z-20">
+      <aside className="hidden md:flex w-64 bg-[#404E3B]/95 backdrop-blur-2xl text-slate-200 flex-col justify-between shadow-2xl border-r border-[#7B9669]/15 print:hidden z-20">
         <div>
           {/* Logo */}
-          <div className="p-6 flex items-center space-x-3 bg-slate-950">
+          <div className="p-6 flex items-center space-x-3 bg-[#2E392A]">
             <Sparkles className="w-8 h-8 text-brand-400 animate-pulse" />
             <div>
               <h1 className="text-xl font-bold text-white tracking-wider m-0 p-0 flex items-center">
@@ -2003,7 +2003,7 @@ function App() {
         </div>
 
         {/* 5-Member Team Collaboration Widget Refactored to Premium User Switcher Dropdown */}
-        <div className="relative p-4 m-4 bg-slate-950 rounded-xl border border-slate-800 no-print">
+        <div className="relative p-4 m-4 bg-[#2E392A] rounded-xl border border-[#7B9669]/20 no-print">
           {showProfileDropdown && (
             <div className="absolute bottom-full left-0 right-0 mb-2 bg-slate-900 border border-slate-800 rounded-xl p-2 shadow-2xl space-y-1 z-30 animate-scale-up">
               <div className="px-2 py-1.5 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
