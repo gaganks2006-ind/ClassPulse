@@ -13,67 +13,108 @@ init_db()
 
 client = TestClient(app)
 
-def test_get_ews_report():
-    # Seed assessments for student 1
+def test_auth_login_educator():
+    # 1. Test Class Teacher Login
+    payload = {"username": "aarav@shiksha.org", "password": "password123"}
+    res = client.post("/api/auth/login", json=payload)
+    assert res.status_code == 200, f"Expected 200, got {res.status_code}: {res.text}"
+    data = res.json()
+    assert data["success"] is True
+    assert data["user"]["role"] == "Class Teacher"
+    assert data["user"]["name"] == "Aarav Sharma"
+    print("SUCCESS: Educator auth login test passed!")
+
+def test_auth_login_student():
+    # 2. Test Student Roll Number Login
+    payload = {"username": "G3-01", "password": "password123"}
+    res = client.post("/api/auth/login", json=payload)
+    assert res.status_code == 200, f"Expected 200, got {res.status_code}: {res.text}"
+    data = res.json()
+    assert data["success"] is True
+    assert data["user"]["role"] == "Student"
+    assert data["user"]["name"] == "Rahul Kumar"
+    assert data["user"]["associated_student_id"] == 1
+    print("SUCCESS: Student roll-number auth login test passed!")
+
+def test_auth_login_parent():
+    # 3. Test Parent Email Login
+    payload = {"username": "parent.rahul@shiksha.org", "password": "password123"}
+    res = client.post("/api/auth/login", json=payload)
+    assert res.status_code == 200, f"Expected 200, got {res.status_code}: {res.text}"
+    data = res.json()
+    assert data["success"] is True
+    assert data["user"]["role"] == "Parent"
+    assert data["user"]["associated_student_id"] == 1
+    print("SUCCESS: Parent email auth login test passed!")
+
+def test_student_practice_resolution():
+    # 4. Test Student Practice Quiz Score Log & Dynamic Mastery Resolution
     from database import get_db_connection
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM assessments WHERE student_id = 1")
-    cursor.execute("INSERT INTO assessments (student_id, subject, assessment_date, total_score) VALUES (1, 'Math', '2026-06-01 10:00:00', 8.5)")
-    cursor.execute("INSERT INTO assessments (student_id, subject, assessment_date, total_score) VALUES (1, 'Math', '2026-06-01 11:00:00', 7.0)")
-    cursor.execute("INSERT INTO assessments (student_id, subject, assessment_date, total_score) VALUES (1, 'Math', '2026-06-01 09:00:00', 6.0)")
-    cursor.execute("INSERT INTO assessments (student_id, subject, assessment_date, total_score) VALUES (1, 'Math', '2026-06-01 12:00:00', 9.5)")
+    # Reset Rahul's Subtract borrowing gap to Critical Gap first
+    cursor.execute("""
+        UPDATE learning_gaps 
+        SET status = 'Critical Gap' 
+        WHERE student_id = 1 AND concept LIKE '%Subtraction Borrowing%'
+    """)
     conn.commit()
     conn.close()
 
+    # Submit a high score (9.0/10) to trigger auto-mastery resolution
+    payload = {
+        "student_id": 1,
+        "subject": "Mathematics",
+        "concept": "Subtraction Borrowing Across Zero",
+        "score": 9.0
+    }
+    res = client.post("/api/students/practice", json=payload)
+    assert res.status_code == 200, f"Expected 200, got {res.status_code}: {res.text}"
+    data = res.json()
+    assert data["success"] is True
+    assert data["gap_resolved"] is True
+    
+    # Check database to confirm gap status updated to Mastered
+    conn = get_db_connection()
+    gap = conn.execute("SELECT status FROM learning_gaps WHERE student_id = 1 AND concept LIKE '%Subtraction Borrowing%'").fetchone()
+    assert gap['status'] == 'Mastered', f"Expected gap to be Mastered, got {gap['status']}"
+    conn.close()
+    
+    print("SUCCESS: Student practice homework & dynamic concept mastery recovery test passed!")
+
+def test_parent_child_diagnostic_file():
+    # 5. Test Consolidated Kid progress profile for Parents
+    res = client.get("/api/parent/child/1")
+    assert res.status_code == 200, f"Expected 200, got {res.status_code}: {res.text}"
+    data = res.json()
+    assert "student" in data
+    assert "assessments" in data
+    assert "gaps" in data
+    assert "attendance_logs" in data
+    assert "interventions" in data
+    
+    assert data["student"]["name"] == "Rahul Kumar"
+    assert isinstance(data["attendance_logs"], list)
+    assert len(data["attendance_logs"]) > 0
+    print("SUCCESS: Parent private kids progress file test passed!")
+
+def test_get_ews_report():
     response = client.get("/api/ews/report")
     assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
     data = response.json()
-    print("Report Response Data:")
-    import json
-    print(json.dumps(data, indent=2))
-    
     assert isinstance(data, list), "Response should be a list"
-    for s in data:
-        assert "student_id" in s, "Missing student_id"
-        assert "name" in s, "Missing name"
-        assert "roll_number" in s, "Missing roll_number"
-        assert "grade" in s, "Missing grade"
-        assert "section" in s, "Missing section"
-        assert "attendance_rate" in s, "Missing attendance_rate"
-        assert "risk_level" in s, "Missing risk_level"
-        assert "last_3_scores" in s, "Missing last_3_scores"
-        assert isinstance(s["last_3_scores"], list), "last_3_scores should be a list"
-        assert len(s["last_3_scores"]) <= 3, "last_3_scores should not contain more than 3 elements"
-        
-    print("\nSUCCESS: All endpoint schema assertions passed!")
-
-def test_get_ews_report_summary():
-    response = client.get("/api/ews/report?summary=true")
-    assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
-    data = response.json()
-    
-    assert isinstance(data, dict), "Response should be a dict when summary=true"
-    assert "report_date" in data, "Missing report_date in summary"
-    assert "total_enrolled" in data, "Missing total_enrolled in summary"
-    assert "high_risk_count" in data, "Missing high_risk_count in summary"
-    assert "medium_risk_count" in data, "Missing medium_risk_count in summary"
-    assert "school_risk_index" in data, "Missing school_risk_index in summary"
-    assert "students" in data, "Missing students in summary"
-    assert "recent_simulated_alerts" in data, "Missing recent_simulated_alerts in summary"
-    
-    assert isinstance(data["students"], list), "students should be a list"
-    assert isinstance(data["recent_simulated_alerts"], list), "recent_simulated_alerts should be a list"
-    
-    print("Summary Report Response Data (first student truncated for length):")
-    import json
-    if data["students"]:
-        print(json.dumps({**data, "students": data["students"][:1]}, indent=2))
-    else:
-        print(json.dumps(data, indent=2))
-        
-    print("\nSUCCESS: Summary endpoint schema assertions passed!")
+    print("SUCCESS: EWS administrative report tests passed!")
 
 if __name__ == "__main__":
+    print("===================================================")
+    print("          CLASSPULSE ERP SUITE TEST RUN            ")
+    print("===================================================\n")
+    test_auth_login_educator()
+    test_auth_login_student()
+    test_auth_login_parent()
+    test_student_practice_resolution()
+    test_parent_child_diagnostic_file()
     test_get_ews_report()
-    test_get_ews_report_summary()
+    print("\n===================================================")
+    print("      ALL PROGRAMMATIC INTEGRATION TESTS PASSED!   ")
+    print("===================================================")

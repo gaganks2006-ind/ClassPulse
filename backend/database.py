@@ -12,19 +12,21 @@ def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # 1. Users/Team Members (Supports 5-member collaboration + CRUD extension)
+    # 1. Users/Team Members (Supports Principal, Class Teacher, Subject Teacher, Parent)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             email TEXT UNIQUE NOT NULL,
-            role TEXT CHECK(role IN ('School Principal', 'Class Teacher', 'Subject Teacher')),
+            role TEXT CHECK(role IN ('School Principal', 'Class Teacher', 'Subject Teacher', 'Parent')),
             status TEXT DEFAULT 'Offline',
-            avatar_url TEXT
+            avatar_url TEXT,
+            password TEXT NOT NULL DEFAULT 'password123',
+            associated_student_id INTEGER NULL
         )
     """)
     
-    # 2. Students table (Updated with Attendance & Risk Indicators for EWS)
+    # 2. Students table (Updated with Attendance & Risk Indicators for EWS + Authentication)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS students (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,7 +35,8 @@ def init_db():
             grade TEXT NOT NULL,
             section TEXT NOT NULL,
             attendance_rate REAL DEFAULT 95.0, -- In Percentage (e.g. 74.5)
-            risk_level TEXT DEFAULT 'Low' -- 'Low', 'Medium', 'High'
+            risk_level TEXT DEFAULT 'Low', -- 'Low', 'Medium', 'High'
+            password TEXT NOT NULL DEFAULT 'password123'
         )
     """)
     
@@ -61,8 +64,21 @@ def init_db():
             UNIQUE(student_id, date)
         )
     """)
+
+    # 5. Student Practice Logs (Logs quizzes solved by student on dashboard for Parent Supervision)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS student_practice_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            subject TEXT NOT NULL,         -- 'Mathematics' or 'English'
+            concept TEXT NOT NULL,         -- e.g. 'Double-digit Addition with Carry'
+            score REAL NOT NULL,           -- Practice quiz score (out of 10)
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(student_id) REFERENCES students(id)
+        )
+    """)
     
-    # 5. Assessments table
+    # 6. Assessments table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS assessments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -79,7 +95,7 @@ def init_db():
         )
     """)
     
-    # 6. Diagnosed Learning Gaps
+    # 7. Diagnosed Learning Gaps
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS learning_gaps (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -94,7 +110,7 @@ def init_db():
         )
     """)
     
-    # 7. Collaborative Team Activity & Interventions (Updated for EWS Alerting)
+    # 8. Collaborative Team Activity & Interventions (Updated for EWS Alerting)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS team_activity (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -108,19 +124,24 @@ def init_db():
         )
     """)
     
-    # Seed collaborating team members with cleaned RBAC roles
+    # Seed collaborating team members with cleaned RBAC roles (includes mock parents)
     cursor.execute("SELECT COUNT(*) FROM users")
     if cursor.fetchone()[0] == 0:
         mock_members = [
-            ("Aarav Sharma", "aarav@shiksha.org", "Class Teacher", "Active", "https://api.dicebear.com/7.x/adventurer/svg?seed=Aarav"),
-            ("Priya Patel", "priya@shiksha.org", "Class Teacher", "Active", "https://api.dicebear.com/7.x/adventurer/svg?seed=Priya"),
-            ("Gagan K S", "gagan@shiksha.org", "Subject Teacher", "Active", "https://api.dicebear.com/7.x/adventurer/svg?seed=Gagan"),
-            ("Meera Nair", "meera@shiksha.org", "Subject Teacher", "Offline", "https://api.dicebear.com/7.x/adventurer/svg?seed=Meera"),
-            ("Vikram Singh", "vikram@shiksha.org", "School Principal", "Offline", "https://api.dicebear.com/7.x/adventurer/svg?seed=Vikram")
+            # Staff Members
+            ("Aarav Sharma", "aarav@shiksha.org", "Class Teacher", "Active", "https://api.dicebear.com/7.x/adventurer/svg?seed=Aarav", "password123", None),
+            ("Priya Patel", "priya@shiksha.org", "Class Teacher", "Active", "https://api.dicebear.com/7.x/adventurer/svg?seed=Priya", "password123", None),
+            ("Gagan K S", "gagan@shiksha.org", "Subject Teacher", "Active", "https://api.dicebear.com/7.x/adventurer/svg?seed=Gagan", "password123", None),
+            ("Meera Nair", "meera@shiksha.org", "Subject Teacher", "Offline", "https://api.dicebear.com/7.x/adventurer/svg?seed=Meera", "password123", None),
+            ("Vikram Singh", "vikram@shiksha.org", "School Principal", "Offline", "https://api.dicebear.com/7.x/adventurer/svg?seed=Vikram", "password123", None),
+            # Mock Parent Accounts
+            ("Ramesh Kumar", "parent.rahul@shiksha.org", "Parent", "Offline", "https://api.dicebear.com/7.x/adventurer/svg?seed=Ramesh", "password123", 1), # linked to Rahul Kumar (student 1)
+            ("Sunitha Rao", "parent.ananya@shiksha.org", "Parent", "Offline", "https://api.dicebear.com/7.x/adventurer/svg?seed=Sunitha", "password123", 2), # linked to Ananya Rao (student 2)
+            ("Vijay Mehta", "parent.kabir@shiksha.org", "Parent", "Offline", "https://api.dicebear.com/7.x/adventurer/svg?seed=Vijay", "password123", 8)  # linked to Kabir Mehta (student 8)
         ]
         cursor.executemany("""
-            INSERT INTO users (name, email, role, status, avatar_url)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO users (name, email, role, status, avatar_url, password, associated_student_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """, mock_members)
         
     # Seed Classrooms (ERP feature)
@@ -136,30 +157,30 @@ def init_db():
             VALUES (?, ?, ?, ?)
         """, mock_classrooms)
         
-    # Seed students with specific EWS indicators (extended to multiple classes)
+    # Seed students with specific EWS indicators (extended to multiple classes + passwords)
     cursor.execute("SELECT COUNT(*) FROM students")
     if cursor.fetchone()[0] == 0:
         mock_students = [
             # Grade 3 Section A
-            ("Rahul Kumar", "G3-01", "Grade 3", "A", 72.5, "High"),      # High Risk
-            ("Ananya Rao", "G3-02", "Grade 3", "A", 96.0, "Low"),       # Low Risk
-            ("Karan Singh", "G3-03", "Grade 3", "A", 81.0, "Medium"),    # Medium Risk
-            ("Diya Sen", "G3-04", "Grade 3", "A", 94.5, "Low"),        # Low Risk
-            ("Aditya Joshi", "G3-05", "Grade 3", "A", 68.0, "High"),     # High Risk
+            ("Rahul Kumar", "G3-01", "Grade 3", "A", 72.5, "High", "password123"),
+            ("Ananya Rao", "G3-02", "Grade 3", "A", 96.0, "Low", "password123"),
+            ("Karan Singh", "G3-03", "Grade 3", "A", 81.0, "Medium", "password123"),
+            ("Diya Sen", "G3-04", "Grade 3", "A", 94.5, "Low", "password123"),
+            ("Aditya Joshi", "G3-05", "Grade 3", "A", 68.0, "High", "password123"),
             # Grade 3 Section B
-            ("Rohan Das", "G3-06", "Grade 3", "B", 92.0, "Low"),
-            ("Sneha Reddy", "G3-07", "Grade 3", "B", 88.0, "Low"),
-            ("Kabir Mehta", "G3-08", "Grade 3", "B", 74.0, "High"),
+            ("Rohan Das", "G3-06", "Grade 3", "B", 92.0, "Low", "password123"),
+            ("Sneha Reddy", "G3-07", "Grade 3", "B", 88.0, "Low", "password123"),
+            ("Kabir Mehta", "G3-08", "Grade 3", "B", 74.0, "High", "password123"),
             # Grade 4 Section A
-            ("Nisha Nair", "G4-01", "Grade 4", "A", 95.5, "Low"),
-            ("Vikram Malhotra", "G4-02", "Grade 4", "A", 83.5, "Medium")
+            ("Nisha Nair", "G4-01", "Grade 4", "A", 95.5, "Low", "password123"),
+            ("Vikram Malhotra", "G4-02", "Grade 4", "A", 83.5, "Medium", "password123")
         ]
         cursor.executemany("""
-            INSERT INTO students (name, roll_number, grade, section, attendance_rate, risk_level)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO students (name, roll_number, grade, section, attendance_rate, risk_level, password)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """, mock_students)
         
-        # Seed some daily attendance records
+        # Seed daily attendance records
         mock_attendance = []
         students_to_seed = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         # Seed attendance for last 5 school days
@@ -180,10 +201,46 @@ def init_db():
             INSERT OR IGNORE INTO attendance_records (student_id, date, status)
             VALUES (?, ?, ?)
         """, mock_attendance)
+
+        # Seed 2 baseline practice attempts for Rahul Kumar (for parent supervision visual timeline demo)
+        mock_practices = [
+            (1, "Mathematics", "Single-digit Addition", 10.0, "2026-05-29 14:10:00"),
+            (1, "Mathematics", "Double-digit Addition with Carry", 6.0, "2026-06-01 16:30:00")
+        ]
+        cursor.executemany("""
+            INSERT INTO student_practice_logs (student_id, subject, concept, score, timestamp)
+            VALUES (?, ?, ?, ?, ?)
+        """, mock_practices)
+        
+        # Seed baseline assessments and learning gaps for Rahul Kumar (student_id = 1) so programmatic tests and dashboard have initial diagnostic content
+        cursor.execute("SELECT COUNT(*) FROM assessments")
+        if cursor.fetchone()[0] == 0:
+            cursor.execute("""
+                INSERT INTO assessments (id, student_id, subject, assessment_date, scanned_by_user_id, total_score, summary)
+                VALUES (1, 1, 'Mathematics', '2026-06-01 10:00:00', 3, 7.5, 'Rahul is progressing but struggles with double digit addition carryover and subtraction borrowing.')
+            """)
+            cursor.executemany("""
+                INSERT INTO learning_gaps (assessment_id, student_id, concept, status, misconception_details, remedial_resource)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, [
+                (1, 1, "Single-digit Addition", "Mastered", "Can add single digit numbers reliably.", "https://diksha.gov.in/resources/fln-bridge-modules"),
+                (1, 1, "Double-digit Addition with Carry", "Needs Improvement", "Sometimes forgets to carry the 1.", "https://diksha.gov.in/resources/fln-bridge-modules"),
+                (1, 1, "Subtraction Borrowing Across Zero", "Critical Gap", "Incorrectly subtracts larger number from smaller in units place when borrowing.", "https://diksha.gov.in/resources/fln-bridge-modules")
+            ])
+            
+            # Seed early warning alerts / collaborative comments
+            cursor.executemany("""
+                INSERT INTO team_activity (user_id, student_id, activity_type, description)
+                VALUES (?, ?, ?, ?)
+            """, [
+                (3, 1, 'ews_alert', '🚨 EARLY WARNING SYSTEM ALERT: Rahul Kumar is flagged as HIGH DROPOUT RISK. Attendance: 72.5%, recent test scores indicate high learning regression.'),
+                (1, 1, 'comment', "Chirag, let's review Rahul's double-digit math worksheets together. We need to assign Rathik to run a customized 1-on-1 tutoring session."),
+                (2, 1, 'comment', "I checked the EWS dashboard. I've initiated a Home Visit plan with the parents to discuss Rahul's attendance drop.")
+            ])
         
     conn.commit()
     conn.close()
-    print("Database initialized successfully with Classrooms and Attendance Records.")
+    print("Database initialized successfully with parent logins and student practice logs.")
 
 if __name__ == "__main__":
     init_db()
