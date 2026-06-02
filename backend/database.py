@@ -148,9 +148,17 @@ def init_db():
     cursor.execute("SELECT COUNT(*) FROM classrooms")
     if cursor.fetchone()[0] == 0:
         mock_classrooms = [
+            ("Grade 1", "A", 1, "Room 101"),
+            ("Grade 2", "A", 2, "Room 201"),
             ("Grade 3", "A", 1, "Room 301"),  # Aarav Sharma
             ("Grade 3", "B", 2, "Room 302"),  # Priya Patel
-            ("Grade 4", "A", 4, "Room 401")   # Meera Nair
+            ("Grade 4", "A", 4, "Room 401"),  # Meera Nair
+            ("Grade 5", "A", 1, "Room 501"),
+            ("Grade 6", "A", 2, "Room 601"),
+            ("Grade 7", "A", 4, "Room 701"),
+            ("Grade 8", "A", 1, "Room 801"),
+            ("Grade 9", "A", 2, "Room 901"),
+            ("Grade 10", "A", 4, "Room 1001")
         ]
         cursor.executemany("""
             INSERT INTO classrooms (name, section, class_teacher_id, room_number)
@@ -161,28 +169,52 @@ def init_db():
     cursor.execute("SELECT COUNT(*) FROM students")
     if cursor.fetchone()[0] == 0:
         mock_students = [
-            # Grade 3 Section A
+            # Keep original 10 students first to maintain 100% test compatibility
             ("Rahul Kumar", "G3-01", "Grade 3", "A", 72.5, "High", "password123"),
             ("Ananya Rao", "G3-02", "Grade 3", "A", 96.0, "Low", "password123"),
             ("Karan Singh", "G3-03", "Grade 3", "A", 81.0, "Medium", "password123"),
             ("Diya Sen", "G3-04", "Grade 3", "A", 94.5, "Low", "password123"),
             ("Aditya Joshi", "G3-05", "Grade 3", "A", 68.0, "High", "password123"),
-            # Grade 3 Section B
             ("Rohan Das", "G3-06", "Grade 3", "B", 92.0, "Low", "password123"),
             ("Sneha Reddy", "G3-07", "Grade 3", "B", 88.0, "Low", "password123"),
             ("Kabir Mehta", "G3-08", "Grade 3", "B", 74.0, "High", "password123"),
-            # Grade 4 Section A
             ("Nisha Nair", "G4-01", "Grade 4", "A", 95.5, "Low", "password123"),
-            ("Vikram Malhotra", "G4-02", "Grade 4", "A", 83.5, "Medium", "password123")
+            ("Vikram Malhotra", "G4-02", "Grade 4", "A", 83.5, "Medium", "password123"),
+            
+            # Additional Grade-level students to cover all Grades 1 to 10
+            # Grade 1
+            ("Aanya Sharma", "G1-01", "Grade 1", "A", 95.0, "Low", "password123"),
+            ("Kavya Goel", "G1-02", "Grade 1", "A", 82.0, "Medium", "password123"),
+            # Grade 2
+            ("Ishaan Patel", "G2-01", "Grade 2", "A", 91.0, "Low", "password123"),
+            ("Riya Sen", "G2-02", "Grade 2", "A", 74.0, "High", "password123"),
+            # Grade 5
+            ("Aarav Gupta", "G5-01", "Grade 5", "A", 89.0, "Low", "password123"),
+            ("Tanvi Rao", "G5-02", "Grade 5", "A", 70.0, "High", "password123"),
+            # Grade 6
+            ("Aditi Joshi", "G6-01", "Grade 6", "A", 96.5, "Low", "password123"),
+            ("Dev Dixit", "G6-02", "Grade 6", "A", 80.5, "Medium", "password123"),
+            # Grade 7
+            ("Siddharth Roy", "G7-01", "Grade 7", "A", 92.0, "Low", "password123"),
+            ("Khushi Shah", "G7-02", "Grade 7", "A", 77.0, "Medium", "password123"),
+            # Grade 8
+            ("Kabir Kapoor", "G8-01", "Grade 8", "A", 94.0, "Low", "password123"),
+            ("Prisha Varma", "G8-02", "Grade 8", "A", 69.5, "High", "password123"),
+            # Grade 9
+            ("Ranveer Singh", "G9-01", "Grade 9", "A", 88.0, "Low", "password123"),
+            ("Meghna Nair", "G9-02", "Grade 9", "A", 81.5, "Medium", "password123"),
+            # Grade 10
+            ("Yash Birla", "G10-01", "Grade 10", "A", 97.0, "Low", "password123"),
+            ("Shruti Sen", "G10-02", "Grade 10", "A", 65.5, "High", "password123")
         ]
         cursor.executemany("""
             INSERT INTO students (name, roll_number, grade, section, attendance_rate, risk_level, password)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, mock_students)
         
-        # Seed daily attendance records
+        # Seed daily attendance records for all 26 students
         mock_attendance = []
-        students_to_seed = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        students_to_seed = list(range(1, 27))
         # Seed attendance for last 5 school days
         dates = ["2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29", "2026-06-01"]
         for s_id in students_to_seed:
