@@ -90,6 +90,8 @@ def init_db():
             total_score REAL,
             max_score REAL DEFAULT 10.0,
             summary TEXT,
+            ai_confidence_score REAL DEFAULT 0.0,
+            remediation_plan TEXT,
             FOREIGN KEY (student_id) REFERENCES students(id),
             FOREIGN KEY (scanned_by_user_id) REFERENCES users(id)
         )

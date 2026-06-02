@@ -128,6 +128,19 @@ function App() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanSuccess, setScanSuccess] = useState(null);
   const [uploadedFile, setUploadedFile] = useState(null);
+  
+  // Advanced AI & Assessment Features States
+  const [scannerMode, setScannerMode] = useState("single"); // "single", "batch", "voice"
+  const [batchFiles, setBatchFiles] = useState([]);
+  const [batchResults, setBatchResults] = useState(null);
+  const [isBatchScanning, setIsBatchScanning] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [recordingTimer, setRecordingTimer] = useState(0);
+  const [voiceTranscription, setVoiceTranscription] = useState("");
+  const [voiceDiagnostic, setVoiceDiagnostic] = useState(null);
+  const [isVoiceAnalyzing, setIsVoiceAnalyzing] = useState(false);
+
 
   useEffect(() => {
     fetchInitialData();
@@ -281,6 +294,183 @@ function App() {
       setIsScanning(false);
     }
   };
+
+  const handleBatchScanSubmit = async (e) => {
+    e.preventDefault();
+    if (batchFiles.length === 0 || !activeUser) {
+      alert("Please select worksheets and ensure a team member is active.");
+      return;
+    }
+
+    setIsBatchScanning(true);
+    setBatchResults(null);
+
+    const formData = new FormData();
+    formData.append("subject", scanSubject);
+    formData.append("grade", scanGrade);
+    formData.append("scanned_by_user_id", activeUser.id);
+    
+    for (let i = 0; i < batchFiles.length; i++) {
+      formData.append("files", batchFiles[i]);
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/scan/batch`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        setBatchResults(data.results);
+        fetchInitialData();
+        alert(`Successfully processed ${data.results.length} worksheets!`);
+      } else {
+        alert("Batch scan failed: " + data.detail);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Batch scan failed. Ensure backend server is running on localhost:8000.");
+    } finally {
+      setIsBatchScanning(false);
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      const chunks = [];
+      
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+      
+      recorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        await handleVoiceAssessmentSubmit(blob);
+      };
+      
+      setMediaRecorder(recorder);
+      recorder.start();
+      setIsRecording(true);
+      setRecordingTimer(0);
+      
+      const interval = setInterval(() => {
+        setRecordingTimer((prev) => prev + 1);
+      }, 1000);
+      window.recordingInterval = interval;
+      
+    } catch (err) {
+      console.error("Failed to start voice recording", err);
+      alert("Microphone access blocked. You can use the Direct Text Observation input box instead!");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder && isRecording) {
+      mediaRecorder.stop();
+      mediaRecorder.stream.getTracks().forEach(track => track.stop());
+      setIsRecording(false);
+      clearInterval(window.recordingInterval);
+    }
+  };
+
+  const handleVoiceAssessmentSubmit = async (audioBlobOrString) => {
+    setIsVoiceAnalyzing(true);
+    setVoiceDiagnostic(null);
+
+    const formData = new FormData();
+    formData.append("scanned_by_user_id", activeUser.id);
+    
+    if (audioBlobOrString instanceof Blob) {
+      formData.append("file", audioBlobOrString, "observation.webm");
+    } else if (typeof audioBlobOrString === "string") {
+      formData.append("transcription", audioBlobOrString);
+    } else {
+      if (!voiceTranscription.trim()) {
+        alert("Please enter spoken or observed text.");
+        setIsVoiceAnalyzing(false);
+        return;
+      }
+      formData.append("transcription", voiceTranscription);
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/voice-assessment`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      
+      if (res.ok) {
+        setVoiceDiagnostic(data);
+        setVoiceTranscription(data.transcription || "");
+      } else {
+        alert("Voice diagnostic failed: " + data.detail);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Voice diagnostic failed. Ensure backend server is running on localhost:8000.");
+    } finally {
+      setIsVoiceAnalyzing(false);
+    }
+  };
+
+  const handleCommitVoiceDiagnostic = async () => {
+    if (!voiceDiagnostic || !activeUser) return;
+    
+    const studentId = voiceDiagnostic.student_id;
+    if (!studentId) {
+      alert("No student could be matched. Please assign a student before committing.");
+      return;
+    }
+
+    try {
+      setIsVoiceAnalyzing(true);
+      const payload = {
+        student_id: studentId,
+        subject: voiceDiagnostic.subject || "Mathematics",
+        score: voiceDiagnostic.total_score || 8.0,
+        summary: voiceDiagnostic.summary || "Voice diagnostic committed.",
+        scanned_by_user_id: activeUser.id,
+        ai_confidence_score: voiceDiagnostic.ai_confidence_score || 90.0,
+        remediation_plan: voiceDiagnostic.remediation_plan || "",
+        gaps: voiceDiagnostic.gaps || []
+      };
+
+      const res = await fetch(`${API_BASE}/assessments/manual`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        alert(`Successfully committed voice observations for ${voiceDiagnostic.student_name}!`);
+        setVoiceDiagnostic(null);
+        setVoiceTranscription("");
+        
+        fetchInitialData();
+        const matchedStudentObj = students.find(s => s.id === studentId);
+        if (matchedStudentObj) {
+          setSelectedStudent(matchedStudentObj);
+          fetchStudentDetail(studentId);
+        }
+        setActiveTab('students');
+      } else {
+        alert("Failed to commit diagnostic: " + data.detail);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Commit failed. Check backend connections.");
+    } finally {
+      setIsVoiceAnalyzing(false);
+    }
+  };
+
 
   return (
     <>
@@ -750,6 +940,94 @@ function App() {
                       </div>
                     </div>
 
+                    {/* NEW SECTION: Weekly AI Remediation Plan Timeline */}
+                    {studentDetail.assessments && studentDetail.assessments.length > 0 && studentDetail.assessments[0].remediation_plan && (
+                      <div className="bg-white/80 backdrop-blur-lg border border-white rounded-3xl p-6 shadow-xl shadow-indigo-100/40">
+                        <h4 className="text-sm font-bold text-slate-800 mb-2 flex items-center">
+                          <Calendar className="w-4.5 h-4.5 text-brand-600 mr-2" />
+                          🧠 Weekly AI Remediation Plan Generator
+                        </h4>
+                        <p className="text-xs text-slate-400 mb-4 font-medium">
+                          Auto-generated personalized learning timeline to bridge diagnosed concepts.
+                        </p>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          {(() => {
+                            const plan = studentDetail.assessments[0].remediation_plan;
+                            const dayParts = plan.split(/(?=Day \d+:)/);
+                            const parsedDays = dayParts.map((part) => {
+                              const match = part.match(/Day (\d+):\s*(.*)/);
+                              if (match) {
+                                return { day: `Day ${match[1]}`, task: match[2].trim() };
+                              }
+                              return { day: "Action Item", task: part.trim() };
+                            });
+
+                            return parsedDays.map((dayItem, idx) => (
+                              <div key={idx} className="bg-gradient-to-br from-slate-50 to-brand-50/10 border border-slate-100 hover:border-brand-200 rounded-2xl p-4 space-y-3 transition-all hover:shadow-md relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 w-24 h-24 bg-brand-500/5 rounded-full -mr-8 -mt-8 transition-all group-hover:scale-110" />
+                                <div className="flex justify-between items-center">
+                                  <span className="text-[10px] font-black uppercase text-brand-600 bg-brand-50 px-2 py-0.5 rounded border border-brand-100">
+                                    {dayItem.day}
+                                  </span>
+                                  <input type="checkbox" className="w-4 h-4 text-brand-600 border-slate-300 rounded focus:ring-brand-500 cursor-pointer" />
+                                </div>
+                                <p className="text-xs font-semibold text-slate-700 leading-relaxed pr-2">
+                                  {dayItem.task}
+                                </p>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* NEW SECTION: AI Assessment Diagnostics Log & Confidence */}
+                    <div className="bg-white/80 backdrop-blur-lg border border-white rounded-3xl p-6 shadow-xl shadow-indigo-100/40">
+                      <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center">
+                        <Sparkles className="w-4.5 h-4.5 text-brand-600 mr-2" />
+                        AI Assessment Diagnostics Log & Confidence
+                      </h4>
+                      <div className="space-y-3">
+                        {studentDetail.assessments && studentDetail.assessments.length > 0 ? (
+                          studentDetail.assessments.map((asm) => {
+                            const conf = asm.ai_confidence_score || 0;
+                            const confColor = conf >= 90 ? 'text-emerald-600 bg-emerald-50 border-emerald-200' :
+                                              conf >= 70 ? 'text-amber-600 bg-amber-50 border-amber-200' :
+                                              'text-rose-600 bg-rose-50 border-rose-200';
+                            return (
+                              <div key={asm.id} className="p-4 rounded-xl border border-slate-100 bg-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <div className="space-y-1">
+                                  <div className="flex items-center space-x-2">
+                                    <span className="text-xs font-bold text-slate-800">{asm.subject}</span>
+                                    <span className="text-[10px] text-slate-400 font-mono">
+                                      {new Date(asm.assessment_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-slate-500 line-clamp-1">{asm.summary}</p>
+                                </div>
+
+                                <div className="flex items-center space-x-4">
+                                  <div className="text-right">
+                                    <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-bold">Diagnostic Score</span>
+                                    <span className="text-sm font-black text-slate-800">{asm.total_score}/10</span>
+                                  </div>
+
+                                  <div className={`px-2.5 py-1 rounded-lg border text-[10px] font-bold flex flex-col items-center ${confColor}`}>
+                                    <span>AI CONFIDENCE</span>
+                                    <span className="text-xs font-black">{conf.toFixed(1)}%</span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <p className="text-xs text-slate-400 text-center py-6">No assessments logged yet for this student.</p>
+                        )}
+                      </div>
+                    </div>
+
+
                     {/* DIKSHA Learning Hub Section */}
                     <div className="bg-white/80 backdrop-blur-lg border border-white rounded-3xl p-6 shadow-xl shadow-indigo-100/40">
                       <div className="flex justify-between items-center mb-4">
@@ -866,157 +1144,524 @@ function App() {
 
           {/* TAB 3: SCAN NEW WORKSHEET */}
           {activeTab === 'scanner' && (
-            <div className="max-w-3xl mx-auto space-y-6">
+            <div className="max-w-4xl mx-auto space-y-6">
               
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-                <div className="mb-6 flex items-center space-x-3">
-                  <div className="p-3 bg-brand-50 rounded-xl text-brand-600">
-                    <Sparkles className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-slate-800">Scan Assessment Sheet</h3>
-                    <p className="text-xs text-slate-500 font-medium">Upload a student's handwritten paper to run AI diagnostics and refresh their EWS risk level.</p>
-                  </div>
-                </div>
-
-                <form onSubmit={handleScanSubmit} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Subject Domain</label>
-                      <select 
-                        value={scanSubject} 
-                        onChange={(e) => setScanSubject(e.target.value)}
-                        className="w-full px-3.5 py-2 border border-slate-200 bg-slate-50 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 outline-none"
-                      >
-                        <option value="Mathematics">Mathematics (Foundational Numeracy)</option>
-                        <option value="English">English (Foundational Literacy)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Target Grade</label>
-                      <select 
-                        value={scanGrade} 
-                        onChange={(e) => setScanGrade(e.target.value)}
-                        className="w-full px-3.5 py-2 border border-slate-200 bg-slate-50 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 outline-none"
-                      >
-                        <option value="Grade 1">Grade 1</option>
-                        <option value="Grade 2">Grade 2</option>
-                        <option value="Grade 3">Grade 3</option>
-                        <option value="Grade 4">Grade 4</option>
-                        <option value="Grade 5">Grade 5</option>
-                        <option value="Grade 6">Grade 6</option>
-                        <option value="Grade 7">Grade 7</option>
-                        <option value="Grade 8">Grade 8</option>
-                        <option value="Grade 9">Grade 9</option>
-                        <option value="Grade 10">Grade 10</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Target Student</label>
-                    <select 
-                      value={scanStudentId} 
-                      onChange={(e) => setScanStudentId(e.target.value)}
-                      required
-                      className="w-full px-3.5 py-2 border border-slate-200 bg-slate-50 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 outline-none"
-                    >
-                      <option value="">-- Choose Student from Classroom --</option>
-                      {students.map(s => (
-                        <option key={s.id} value={s.id}>{s.name} (Roll: {s.roll_number})</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Scanned Sheet Image / Photo</label>
-                    <div className="border-2 border-dashed border-slate-200 hover:border-brand-500 bg-slate-50 hover:bg-brand-50/20 rounded-2xl p-8 text-center cursor-pointer transition-all flex flex-col items-center justify-center relative">
-                      <input 
-                        type="file" 
-                        accept="image/*"
-                        onChange={(e) => setUploadedFile(e.target.files[0])}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      />
-                      <UploadCloud className="w-10 h-10 text-slate-400 mb-3" />
-                      <p className="text-xs font-bold text-slate-700">
-                        {uploadedFile ? uploadedFile.name : "Click to select or drag & drop student worksheet photo"}
-                      </p>
-                      <p className="text-[10px] text-slate-400 mt-1">Supports JPEG, PNG up to 10MB</p>
-                    </div>
-                  </div>
-
-                  <button 
-                    type="submit" 
-                    disabled={isScanning}
-                    className={`w-full py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-sm font-bold shadow-md transition-all flex items-center justify-center ${
-                      isScanning && "opacity-75 cursor-not-allowed"
-                    }`}
-                  >
-                    {isScanning ? (
-                      <>
-                        <RefreshCw className="w-5 h-5 mr-2.5 animate-spin" />
-                        Gemini Multimodal Analyzing & Calculating EWS Risk...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-5 h-5 mr-2.5" />
-                        Run AI Diagnostic & EWS Analysis
-                      </>
-                    )}
-                  </button>
-                </form>
+              {/* Top Selector Segmented Controller */}
+              <div className="flex border border-slate-200 bg-slate-100/80 p-1.5 rounded-2xl max-w-md mx-auto shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => { setScannerMode('single'); setScanSuccess(null); }}
+                  className={`flex-grow py-2 text-xs font-black rounded-xl transition-all flex items-center justify-center space-x-1.5 ${
+                    scannerMode === 'single' ? 'bg-white text-brand-600 shadow-md border-slate-200' : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Single Scan</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setScannerMode('batch'); setBatchResults(null); }}
+                  className={`flex-grow py-2 text-xs font-black rounded-xl transition-all flex items-center justify-center space-x-1.5 ${
+                    scannerMode === 'batch' ? 'bg-white text-brand-600 shadow-md border-slate-200' : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <UploadCloud className="w-3.5 h-3.5" />
+                  <span>Batch Upload</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setScannerMode('voice'); setVoiceDiagnostic(null); }}
+                  className={`flex-grow py-2 text-xs font-black rounded-xl transition-all flex items-center justify-center space-x-1.5 ${
+                    scannerMode === 'voice' ? 'bg-white text-brand-600 shadow-md border-slate-200' : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Voice Observation</span>
+                </button>
               </div>
 
-              {scanSuccess && (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 shadow-sm space-y-4">
-                  <div className="flex items-center space-x-3 mb-2">
-                    <div className="p-2 bg-emerald-100 rounded-xl text-emerald-700">
-                      <CheckCircle className="w-6 h-6" />
+              {/* MODE 1: SINGLE SCAN WORKSPACE */}
+              {scannerMode === 'single' && (
+                <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xl shadow-indigo-100/30 space-y-6">
+                  <div className="flex items-center space-x-3 pb-4 border-b border-slate-100">
+                    <div className="p-3 bg-brand-50 rounded-2xl text-brand-600 shadow-inner">
+                      <Sparkles className="w-6 h-6 animate-pulse" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-bold text-emerald-800">Diagnostic Scanned Successfully</h4>
-                      <p className="text-xs text-emerald-600">Score: {scanSuccess.total_score}/10 • Scanned by {activeUser?.name}</p>
+                      <h3 className="text-base font-black text-slate-850">Single Worksheet Scanner</h3>
+                      <p className="text-xs text-slate-400 font-medium">Upload a handwritten student paper to run immediate cognitive diagnostic mapping.</p>
                     </div>
                   </div>
 
-                  <div className="bg-white border border-emerald-100 rounded-xl p-4 space-y-2">
-                    <h5 className="text-xs font-bold text-slate-700 uppercase tracking-wider">AI Executive Summary</h5>
-                    <p className="text-xs text-slate-600 leading-relaxed">{scanSuccess.summary}</p>
+                  <form onSubmit={handleScanSubmit} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Subject Domain</label>
+                        <select 
+                          value={scanSubject} 
+                          onChange={(e) => setScanSubject(e.target.value)}
+                          className="w-full px-3.5 py-2.5 border border-slate-200 bg-slate-50 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 outline-none"
+                        >
+                          <option value="Mathematics">Mathematics (Numeracy)</option>
+                          <option value="English">Language (English)</option>
+                          <option value="Science">Science</option>
+                          <option value="Environmental Studies (EVS)">Environmental Studies (EVS)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Target Grade Level</label>
+                        <select 
+                          value={scanGrade} 
+                          onChange={(e) => setScanGrade(e.target.value)}
+                          className="w-full px-3.5 py-2.5 border border-slate-200 bg-slate-50 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 outline-none"
+                        >
+                          <option value="Grade 1">Grade 1</option>
+                          <option value="Grade 2">Grade 2</option>
+                          <option value="Grade 3">Grade 3</option>
+                          <option value="Grade 4">Grade 4</option>
+                          <option value="Grade 5">Grade 5</option>
+                          <option value="Grade 6">Grade 6</option>
+                          <option value="Grade 7">Grade 7</option>
+                          <option value="Grade 8">Grade 8</option>
+                          <option value="Grade 9">Grade 9</option>
+                          <option value="Grade 10">Grade 10</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Student Record Reference</label>
+                      <select 
+                        value={scanStudentId} 
+                        onChange={(e) => setScanStudentId(e.target.value)}
+                        required
+                        className="w-full px-3.5 py-2.5 border border-slate-200 bg-slate-50 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 outline-none"
+                      >
+                        <option value="">-- Choose Student from Classroom Registry --</option>
+                        {students.map(s => (
+                          <option key={s.id} value={s.id}>{s.name} (Roll: {s.roll_number})</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Worksheet Image File</label>
+                      <div className="border-2 border-dashed border-slate-200 hover:border-brand-500 bg-slate-50 hover:bg-brand-50/20 rounded-2xl p-8 text-center cursor-pointer transition-all flex flex-col items-center justify-center relative">
+                        <input 
+                          type="file" 
+                          accept="image/*"
+                          onChange={(e) => setUploadedFile(e.target.files[0])}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                        <UploadCloud className="w-10 h-10 text-slate-400 mb-3" />
+                        <p className="text-xs font-bold text-slate-700">
+                          {uploadedFile ? uploadedFile.name : "Select or drag & drop handwritten student worksheet sheet"}
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-1">Supports JPEG, PNG up to 10MB</p>
+                      </div>
+                    </div>
+
+                    <button 
+                      type="submit" 
+                      disabled={isScanning}
+                      className={`w-full py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-bold shadow-md transition-all flex items-center justify-center uppercase tracking-wider ${
+                        isScanning && "opacity-75 cursor-not-allowed"
+                      }`}
+                    >
+                      {isScanning ? (
+                        <>
+                          <RefreshCw className="w-5 h-5 mr-2.5 animate-spin" />
+                          ClassPulse AI Analyzing Cognitive Gaps & Calculating Dropout Warning...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-5 h-5 mr-2.5" />
+                          Evaluate Diagnostic Sheet
+                        </>
+                      )}
+                    </button>
+                  </form>
+
+                  {scanSuccess && (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 shadow-sm space-y-4 animate-fadeIn">
+                      <div className="flex items-center space-x-3 mb-2">
+                        <div className="p-2.5 bg-emerald-100 rounded-xl text-emerald-700">
+                          <CheckCircle className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-emerald-800">Cognitive Assessment Diagnostics Rendered</h4>
+                          <p className="text-xs text-emerald-600">Overall Score: <strong>{scanSuccess.total_score}/10</strong> • Evaluated successfully</p>
+                        </div>
+                      </div>
+
+                      <div className="bg-white border border-emerald-100 rounded-xl p-4 space-y-2">
+                        <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">AI Executive Summary</h5>
+                        <p className="text-xs text-slate-600 leading-relaxed font-semibold">{scanSuccess.summary}</p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Diagnosed Learning Gaps & Linkages</h5>
+                        {scanSuccess.gaps.map((gap, i) => (
+                          <div key={i} className="p-4 bg-white border border-emerald-100/50 rounded-xl space-y-2">
+                            <div className="flex justify-between items-center">
+                              <h6 className="text-xs font-black text-slate-800">{gap.concept}</h6>
+                              <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded border ${
+                                gap.status === 'Mastered' ? 'bg-green-50 border-green-100 text-green-700' : 'bg-amber-50 border-amber-100 text-amber-700'
+                              }`}>
+                                {gap.status}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 leading-relaxed">{gap.misconception_details}</p>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      <button 
+                        onClick={() => {
+                          setScanSuccess(null);
+                          setUploadedFile(null);
+                          setActiveTab('students');
+                        }}
+                        className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all uppercase tracking-wider"
+                      >
+                        View Updated Registry Portfolio ➡️
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* MODE 2: BATCH SCAN WORKSPACE */}
+              {scannerMode === 'batch' && (
+                <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xl shadow-indigo-100/30 space-y-6">
+                  <div className="flex items-center space-x-3 pb-4 border-b border-slate-100">
+                    <div className="p-3 bg-brand-50 rounded-2xl text-brand-600 shadow-inner">
+                      <UploadCloud className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-slate-850">Batch Worksheet Scanning (NEP 2020 Platform)</h3>
+                      <p className="text-xs text-slate-400 font-medium">Upload multiple student papers. ClassPulse extracts handwriting signatures, matches database records, and logs diagnostics.</p>
+                    </div>
                   </div>
 
-                  <div className="space-y-3">
-                    <h5 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Learning Gaps</h5>
-                    {scanSuccess.gaps.map((gap, i) => (
-                      <div key={i} className="p-4 bg-white border border-emerald-100/50 rounded-xl space-y-2">
-                        <div className="flex justify-between items-center">
-                          <h6 className="text-xs font-bold text-slate-800">{gap.concept}</h6>
-                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded border ${
-                            gap.status === 'Mastered' ? 'bg-green-50 border-green-100 text-green-700' : 'bg-amber-50 border-amber-100 text-amber-700'
-                          }`}>
-                            {gap.status}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 leading-normal">{gap.misconception_details}</p>
+                  <form onSubmit={handleBatchScanSubmit} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Subject Domain</label>
+                        <select 
+                          value={scanSubject} 
+                          onChange={(e) => setScanSubject(e.target.value)}
+                          className="w-full px-3.5 py-2.5 border border-slate-200 bg-slate-50 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 outline-none"
+                        >
+                          <option value="Mathematics">Mathematics (Numeracy)</option>
+                          <option value="English">Language (English)</option>
+                          <option value="Science">Science</option>
+                          <option value="Environmental Studies (EVS)">Environmental Studies (EVS)</option>
+                        </select>
                       </div>
-                    ))}
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Class Level / Grade</label>
+                        <select 
+                          value={scanGrade} 
+                          onChange={(e) => setScanGrade(e.target.value)}
+                          className="w-full px-3.5 py-2.5 border border-slate-200 bg-slate-50 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 outline-none"
+                        >
+                          <option value="Grade 1">Grade 1</option>
+                          <option value="Grade 2">Grade 2</option>
+                          <option value="Grade 3">Grade 3</option>
+                          <option value="Grade 4">Grade 4</option>
+                          <option value="Grade 5">Grade 5</option>
+                          <option value="Grade 6">Grade 6</option>
+                          <option value="Grade 7">Grade 7</option>
+                          <option value="Grade 8">Grade 8</option>
+                          <option value="Grade 9">Grade 9</option>
+                          <option value="Grade 10">Grade 10</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Select Multiple Scanned Sheets</label>
+                      <div className="border-2 border-dashed border-slate-200 hover:border-brand-500 bg-slate-50 hover:bg-brand-50/20 rounded-2xl p-8 text-center cursor-pointer transition-all flex flex-col items-center justify-center relative">
+                        <input 
+                          type="file" 
+                          multiple 
+                          accept="image/*"
+                          onChange={(e) => setBatchFiles(Array.from(e.target.files))}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                        <UploadCloud className="w-10 h-10 text-slate-400 mb-3" />
+                        <p className="text-xs font-bold text-slate-700">
+                          {batchFiles.length > 0 ? `Selected ${batchFiles.length} files to scan in batch` : "Click to select or drag & drop multiple student worksheet scans"}
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-1">Multi-file processing supports JPEG, PNG sheets</p>
+                      </div>
+                    </div>
+
+                    {batchFiles.length > 0 && (
+                      <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 max-h-44 overflow-y-auto space-y-2">
+                        <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Queue to Process ({batchFiles.length})</h5>
+                        {batchFiles.map((file, idx) => (
+                          <div key={idx} className="flex justify-between items-center text-xs text-slate-600 p-2 bg-white rounded-lg border border-slate-100">
+                            <span className="font-semibold truncate">{file.name}</span>
+                            <span className="text-[10px] text-slate-400 font-mono">{(file.size / 1024).toFixed(0)} KB</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <button 
+                      type="submit" 
+                      disabled={isBatchScanning || batchFiles.length === 0}
+                      className={`w-full py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-bold shadow-md transition-all flex items-center justify-center uppercase tracking-wider ${
+                        (isBatchScanning || batchFiles.length === 0) && "opacity-75 cursor-not-allowed"
+                      }`}
+                    >
+                      {isBatchScanning ? (
+                        <>
+                          <RefreshCw className="w-5 h-5 mr-2.5 animate-spin" />
+                          Running Multi-sheet Cognitive Processing...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-5 h-5 mr-2.5" />
+                          Analyze {batchFiles.length} Sheets in Batch
+                        </>
+                      )}
+                    </button>
+                  </form>
+
+                  {/* Batch analysis results grid */}
+                  {batchResults && (
+                    <div className="space-y-4 animate-fadeIn">
+                      <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">Processed Batch Diagnostics Registry</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {batchResults.map((res, i) => (
+                          <div key={i} className={`p-4 border rounded-2xl space-y-3 shadow-sm bg-white ${
+                            res.success ? 'border-emerald-100 hover:border-emerald-200' : 'border-rose-100'
+                          }`}>
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <h5 className="text-xs font-black text-slate-800">{res.filename}</h5>
+                                {res.success ? (
+                                  <div className="flex items-center space-x-2 mt-1">
+                                    <span className="text-[10px] font-bold text-slate-500">Extracted Name: <strong>{res.student_name}</strong></span>
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
+                                      res.matched_automatically ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'
+                                    }`}>
+                                      {res.matched_automatically ? 'Auto Matched' : 'Fuzzy Fallback'}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-[10px] text-rose-500 font-bold">Failed to analyze</span>
+                                )}
+                              </div>
+                              {res.success && (
+                                <span className="text-xs font-black px-2 py-0.5 bg-brand-50 border border-brand-100 rounded-lg text-brand-700">
+                                  Score: {res.diagnostic.total_score}/10
+                                </span>
+                              )}
+                            </div>
+
+                            {res.success ? (
+                              <div className="space-y-2">
+                                <p className="text-[11px] text-slate-500 leading-snug line-clamp-2">{res.diagnostic.summary}</p>
+                                <div className="flex justify-between items-center text-[10px] pt-2 border-t border-slate-100">
+                                  <span className="text-emerald-600 font-bold">Confidence: {res.diagnostic.ai_confidence_score.toFixed(1)}%</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const matchedS = students.find(s => s.id === res.student_id);
+                                      if (matchedS) {
+                                        setSelectedStudent(matchedS);
+                                        fetchStudentDetail(res.student_id);
+                                        setActiveTab('students');
+                                      }
+                                    }}
+                                    className="text-brand-600 hover:text-brand-700 font-black hover:underline"
+                                  >
+                                    View Student Registry ➡️
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="text-xs text-rose-600 leading-relaxed font-semibold">{res.error}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* MODE 3: VOICE OBSERVATIONS Dictation Cockpit */}
+              {scannerMode === 'voice' && (
+                <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xl shadow-indigo-100/30 space-y-6">
+                  <div className="flex items-center space-x-3 pb-4 border-b border-slate-100">
+                    <div className="p-3 bg-brand-50 rounded-2xl text-brand-600 shadow-inner">
+                      <MessageSquare className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-slate-850">Voice-based Dictation Assessment Center</h3>
+                      <p className="text-xs text-slate-400 font-medium">Record spoken classroom notes or type observations directly. ClassPulse transcribes, analyzes learning gaps, and commits diagnostic portfolios.</p>
+                    </div>
                   </div>
-                  
-                  <button 
-                    onClick={() => {
-                      setScanSuccess(null);
-                      setUploadedFile(null);
-                      setActiveTab('students');
-                    }}
-                    className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-all"
-                  >
-                    View Updated Student Profile ➡️
-                  </button>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Left Panel: Microphone Dictation controls */}
+                    <div className="border border-slate-100 bg-slate-50/50 rounded-2xl p-6 flex flex-col items-center justify-between text-center min-h-[300px] space-y-4">
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Spoken Observations Capture</h4>
+                        <p className="text-[10px] text-slate-500">Record a statement (e.g. "Rahul Kumar scored eight out of ten in math...")</p>
+                      </div>
+
+                      {/* Microphone animation area */}
+                      <div className="relative flex flex-col items-center justify-center">
+                        {isRecording && (
+                          <div className="absolute w-28 h-28 bg-rose-500/10 rounded-full animate-ping" />
+                        )}
+                        <button
+                          type="button"
+                          onClick={isRecording ? stopRecording : startRecording}
+                          className={`w-20 h-20 rounded-full flex items-center justify-center shadow-lg transition-all focus:ring-4 ${
+                            isRecording 
+                              ? 'bg-rose-600 hover:bg-rose-700 text-white focus:ring-rose-200' 
+                              : 'bg-brand-600 hover:bg-brand-700 text-white focus:ring-brand-200 hover:-translate-y-0.5'
+                          }`}
+                        >
+                          {isRecording ? (
+                            <div className="w-6 h-6 bg-white rounded-sm animate-pulse" />
+                          ) : (
+                            <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z" />
+                            </svg>
+                          )}
+                        </button>
+
+                        {/* Visual wave mockup during recording */}
+                        {isRecording && (
+                          <div className="flex space-x-1.5 mt-4 items-center justify-center">
+                            <span className="w-1 bg-rose-500 rounded-full animate-bounce h-4" style={{ animationDelay: '0.1s' }} />
+                            <span className="w-1 bg-rose-500 rounded-full animate-bounce h-6" style={{ animationDelay: '0.2s' }} />
+                            <span className="w-1 bg-rose-500 rounded-full animate-bounce h-8" style={{ animationDelay: '0.3s' }} />
+                            <span className="w-1 bg-rose-500 rounded-full animate-bounce h-6" style={{ animationDelay: '0.4s' }} />
+                            <span className="w-1 bg-rose-500 rounded-full animate-bounce h-4" style={{ animationDelay: '0.5s' }} />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-1 font-mono">
+                        {isRecording ? (
+                          <span className="text-xs text-rose-600 font-bold animate-pulse">RECORDING: {recordingTimer}s</span>
+                        ) : (
+                          <span className="text-[10px] text-slate-400">Microphone status: Ready</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right Panel: Manual / Edit Transcription dictation box */}
+                    <div className="border border-slate-100 rounded-2xl p-6 flex flex-col justify-between min-h-[300px] bg-white space-y-4">
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Dictation Observation Workspace</h4>
+                        <p className="text-[10px] text-slate-500">Edit recorded transcription or type observations directly.</p>
+                      </div>
+
+                      <textarea
+                        value={voiceTranscription}
+                        onChange={(e) => setVoiceTranscription(e.target.value)}
+                        placeholder="Say or type here e.g.: 'Rahul Kumar scored 8.5 out of 10 in math. He mastered single-digit addition but struggles with carryover addition.'"
+                        className="flex-1 w-full p-4 border border-slate-200 bg-slate-50 hover:bg-slate-50/50 focus:bg-white rounded-xl text-xs focus:ring-2 focus:ring-brand-500 outline-none resize-none transition-all leading-relaxed font-semibold text-slate-700"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => handleVoiceAssessmentSubmit(voiceTranscription)}
+                        disabled={isVoiceAnalyzing || !voiceTranscription.trim()}
+                        className={`w-full py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all uppercase tracking-wider ${
+                          (isVoiceAnalyzing || !voiceTranscription.trim()) && 'opacity-70 cursor-not-allowed'
+                        }`}
+                      >
+                        {isVoiceAnalyzing ? 'Analyzing Text Insight...' : 'Run Cognitive Observation NLP ➡️'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Dictation Extraction Results Preview */}
+                  {voiceDiagnostic && (
+                    <div className="bg-gradient-to-br from-emerald-50 to-indigo-50/20 border border-emerald-100 rounded-2xl p-6 shadow-sm space-y-4 animate-fadeIn">
+                      <div className="flex items-center space-x-3 pb-3 border-b border-emerald-200/50">
+                        <div className="p-2 bg-emerald-100 rounded-xl text-emerald-700">
+                          <CheckCircle className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Structured Observation Diagnostics Extracted</h4>
+                          <p className="text-[10px] text-slate-500">Confidence Match: <strong>{voiceDiagnostic.ai_confidence_score.toFixed(1)}%</strong></p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-3 bg-white p-4 rounded-xl border border-slate-100/50">
+                          <h5 className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Matched Student Details</h5>
+                          <div className="space-y-1 text-xs">
+                            <p className="font-bold text-slate-800">Name: <span className="text-brand-600">{voiceDiagnostic.student_name}</span></p>
+                            <p className="font-mono text-slate-500">Roll No: {voiceDiagnostic.roll_number || 'N/A'}</p>
+                            <p className="text-slate-500">Grade: {voiceDiagnostic.grade || 'N/A'} • Section: {voiceDiagnostic.section || 'N/A'}</p>
+                            {voiceDiagnostic.matched_automatically === false && (
+                              <span className="inline-block px-1.5 py-0.2 bg-amber-50 text-amber-700 text-[8px] font-bold rounded border border-amber-200 mt-1 uppercase">
+                                Fuzzy Match Fallback
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="space-y-3 bg-white p-4 rounded-xl border border-slate-100/50">
+                          <h5 className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Assessment Scope</h5>
+                          <div className="space-y-1 text-xs">
+                            <p className="font-bold text-slate-800">Subject: <span className="text-slate-700">{voiceDiagnostic.subject}</span></p>
+                            <p className="font-bold text-slate-800">Diagnostic Score: <span className="text-brand-600">{voiceDiagnostic.total_score}/10</span></p>
+                            <p className="text-[10px] text-slate-500 leading-snug line-clamp-2">{voiceDiagnostic.summary}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <h5 className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Diagnostic Concept Mapping</h5>
+                        {voiceDiagnostic.gaps.map((gap, i) => (
+                          <div key={i} className="p-3 bg-white border border-slate-100 rounded-xl space-y-1.5">
+                            <div className="flex justify-between items-center text-xs">
+                              <h6 className="font-black text-slate-850">{gap.concept}</h6>
+                              <span className={`text-[9px] font-extrabold px-2 py-0.2 rounded border ${
+                                gap.status === 'Mastered' ? 'bg-green-50 border-green-150 text-green-700' : 'bg-amber-50 border-amber-150 text-amber-700'
+                              }`}>
+                                {gap.status}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 leading-relaxed">{gap.misconception_details}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleCommitVoiceDiagnostic}
+                        disabled={isVoiceAnalyzing}
+                        className={`w-full py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition-all uppercase tracking-wider ${
+                          isVoiceAnalyzing && 'opacity-70 cursor-not-allowed'
+                        }`}
+                      >
+                        {isVoiceAnalyzing ? 'Saving Diagnostic Portfolio...' : 'Commit Structured Diagnostic to Registry Portal ➡️'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
             </div>
           )}
+
 
           {/* TAB 4: SCHOOL RISK REPORT - PRINCIPAL VIEW */}
           {activeTab === 'report' && (

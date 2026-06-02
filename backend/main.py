@@ -73,12 +73,22 @@ class AttendanceSubmit(BaseModel):
     records: List[AttendanceEntry]
     user_id: int  # Teacher taking attendance
 
+class GapCreate(BaseModel):
+    concept: str
+    status: str
+    misconception_details: Optional[str] = ""
+    remedial_resource: Optional[str] = ""
+
 class ManualAssessmentCreate(BaseModel):
     student_id: int
     subject: str
     score: float
     summary: Optional[str] = ""
     scanned_by_user_id: int
+    ai_confidence_score: Optional[float] = 0.0
+    remediation_plan: Optional[str] = ""
+    gaps: Optional[List[GapCreate]] = None
+
 
 # --- Pydantic Models for Authentication & Student practice ---
 class LoginRequest(BaseModel):
@@ -651,49 +661,67 @@ def record_manual_assessment(data: ManualAssessmentCreate):
         
         # 1. Insert assessment record
         cursor.execute("""
-            INSERT INTO assessments (student_id, subject, assessment_date, scanned_by_user_id, total_score, summary)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO assessments (student_id, subject, assessment_date, scanned_by_user_id, total_score, summary, ai_confidence_score, remediation_plan)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             data.student_id,
             data.subject,
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             data.scanned_by_user_id,
             data.score,
-            data.summary or f"Manual test score logged in {data.subject} by Evaluator."
+            data.summary or f"Manual test score logged in {data.subject} by Evaluator.",
+            data.ai_confidence_score or 0.0,
+            data.remediation_plan or ""
         ))
         assessment_id = cursor.lastrowid
         
-        # 2. Diagnose learning gaps based on score thresholds (Simulated evaluator)
-        if data.score < 5.5:
-            cursor.execute("""
-                INSERT INTO learning_gaps (assessment_id, student_id, concept, status, misconception_details, remedial_resource)
-                VALUES (?, ?, ?, 'Critical Gap', ?, 'https://diksha.gov.in/play-based/zero-borrowing-beads-activity')
-            """, (
-                assessment_id,
-                data.student_id,
-                f"{data.subject} Foundational Skills",
-                f"Evaluation score ({data.score}/10) indicates severe foundational learning gaps in {data.subject}."
-            ))
-        elif data.score < 7.0:
-            cursor.execute("""
-                INSERT INTO learning_gaps (assessment_id, student_id, concept, status, misconception_details, remedial_resource)
-                VALUES (?, ?, ?, 'Needs Improvement', ?, 'https://diksha.gov.in/resources/place-value-carryover')
-            """, (
-                assessment_id,
-                data.student_id,
-                f"{data.subject} Core Competencies",
-                f"Evaluation score ({data.score}/10) indicates minor slips in {data.subject}. Needs reinforcement exercises."
-            ))
+        # 2. Diagnose or insert learning gaps
+        if data.gaps is not None and len(data.gaps) > 0:
+            for gap in data.gaps:
+                cursor.execute("""
+                    INSERT INTO learning_gaps (assessment_id, student_id, concept, status, misconception_details, remedial_resource)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (
+                    assessment_id,
+                    data.student_id,
+                    gap.concept,
+                    gap.status,
+                    gap.misconception_details or "",
+                    gap.remedial_resource or ""
+                ))
         else:
-            cursor.execute("""
-                INSERT INTO learning_gaps (assessment_id, student_id, concept, status, misconception_details, remedial_resource)
-                VALUES (?, ?, ?, 'Mastered', ?, '')
-            """, (
-                assessment_id,
-                data.student_id,
-                f"{data.subject} Mastery",
-                f"Evaluation score ({data.score}/10) confirms solid understanding and fluency in {data.subject}."
-            ))
+            # Diagnose learning gaps based on score thresholds (Simulated evaluator)
+            if data.score < 5.5:
+                cursor.execute("""
+                    INSERT INTO learning_gaps (assessment_id, student_id, concept, status, misconception_details, remedial_resource)
+                    VALUES (?, ?, ?, 'Critical Gap', ?, 'https://diksha.gov.in/play-based/zero-borrowing-beads-activity')
+                """, (
+                    assessment_id,
+                    data.student_id,
+                    f"{data.subject} Foundational Skills",
+                    f"Evaluation score ({data.score}/10) indicates severe foundational learning gaps in {data.subject}."
+                ))
+            elif data.score < 7.0:
+                cursor.execute("""
+                    INSERT INTO learning_gaps (assessment_id, student_id, concept, status, misconception_details, remedial_resource)
+                    VALUES (?, ?, ?, 'Needs Improvement', ?, 'https://diksha.gov.in/resources/place-value-carryover')
+                """, (
+                    assessment_id,
+                    data.student_id,
+                    f"{data.subject} Core Competencies",
+                    f"Evaluation score ({data.score}/10) indicates minor slips in {data.subject}. Needs reinforcement exercises."
+                ))
+            else:
+                cursor.execute("""
+                    INSERT INTO learning_gaps (assessment_id, student_id, concept, status, misconception_details, remedial_resource)
+                    VALUES (?, ?, ?, 'Mastered', ?, '')
+                """, (
+                    assessment_id,
+                    data.student_id,
+                    f"{data.subject} Mastery",
+                    f"Evaluation score ({data.score}/10) confirms solid understanding and fluency in {data.subject}."
+                ))
+
             
         # 3. Dynamic EWS risk engine recalculations
         attendance = student_data.get("attendance_rate", 95.0)
@@ -785,15 +813,17 @@ async def scan_assessment(
         # 1. Insert into assessments
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO assessments (student_id, subject, assessment_date, scanned_by_user_id, total_score, summary)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO assessments (student_id, subject, assessment_date, scanned_by_user_id, total_score, summary, ai_confidence_score, remediation_plan)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             student_id,
             subject,
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             scanned_by_user_id,
             score,
-            diagnostic.get("summary", "")
+            diagnostic.get("summary", ""),
+            diagnostic.get("ai_confidence_score", 0.0),
+            diagnostic.get("remediation_plan", "")
         ))
         assessment_id = cursor.lastrowid
         
@@ -882,6 +912,218 @@ async def scan_assessment(
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
+
+# 19b. Batch Upload & Analyze Assessment Sheets
+@app.post("/api/scan/batch")
+async def scan_batch(
+    subject: str = Form(...),
+    grade: str = Form(...),
+    scanned_by_user_id: int = Form(...),
+    files: List[UploadFile] = File(...)
+):
+    results = []
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Load all students for this grade to match them
+        students_in_grade = conn.execute("SELECT id, name, roll_number, attendance_rate, risk_level FROM students WHERE grade = ?", (grade,)).fetchall()
+        students_list = [dict(s) for s in students_in_grade]
+        
+        for file in files:
+            contents = await file.read()
+            # Analyze using Gemini/Fallback
+            try:
+                diagnostic = analyze_test_paper(contents, subject, grade)
+            except Exception as e:
+                # Log error and continue with next file
+                results.append({
+                    "filename": file.filename,
+                    "success": False,
+                    "error": f"Failed to analyze: {str(e)}"
+                })
+                continue
+                
+            score = diagnostic.get("total_score", 0.0)
+            extracted_name = diagnostic.get("student_name", "Unknown Student")
+            extracted_roll = diagnostic.get("roll_number", "")
+            
+            # Fuzzy match student
+            matched_student = None
+            # 1. Exact match on name
+            for s in students_list:
+                if s["name"].lower() == extracted_name.lower():
+                    matched_student = s
+                    break
+            # 2. Match on roll number
+            if not matched_student and extracted_roll:
+                for s in students_list:
+                    if s["roll_number"].lower() == extracted_roll.lower():
+                        matched_student = s
+                        break
+            # 3. Substring match on name
+            if not matched_student:
+                for s in students_list:
+                    if extracted_name.lower() in s["name"].lower() or s["name"].lower() in extracted_name.lower():
+                        matched_student = s
+                        break
+            
+            # Fallback if no match is found: assign to the first student in the class, but mark matched_automatically=False
+            matched_automatically = True
+            if not matched_student:
+                matched_automatically = False
+                if students_list:
+                    matched_student = students_list[0] # Fallback to first student in grade
+                else:
+                    results.append({
+                        "filename": file.filename,
+                        "success": False,
+                        "error": f"No students found in grade '{grade}' to associate this scan."
+                    })
+                    continue
+            
+            student_id = matched_student["id"]
+            
+            # Save to assessments table
+            cursor.execute("""
+                INSERT INTO assessments (student_id, subject, assessment_date, scanned_by_user_id, total_score, summary, ai_confidence_score, remediation_plan)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                student_id,
+                subject,
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                scanned_by_user_id,
+                score,
+                diagnostic.get("summary", ""),
+                diagnostic.get("ai_confidence_score", 0.0),
+                diagnostic.get("remediation_plan", "")
+            ))
+            assessment_id = cursor.lastrowid
+            
+            # Save learning gaps
+            for gap in diagnostic.get("gaps", []):
+                cursor.execute("""
+                    INSERT INTO learning_gaps (assessment_id, student_id, concept, status, misconception_details, remedial_resource)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (
+                    assessment_id,
+                    student_id,
+                    gap.get("concept", ""),
+                    gap.get("status", "Needs Improvement"),
+                    gap.get("misconception_details", ""),
+                    gap.get("remedial_resource", "")
+                ))
+                
+            # Dynamic EWS risk engine update
+            attendance = matched_student.get("attendance_rate", 95.0)
+            new_risk = "Low"
+            if score < 5.5 and attendance < 80.0:
+                new_risk = "High"
+            elif score < 7.0 and attendance < 85.0:
+                new_risk = "Medium"
+            elif score >= 7.5:
+                new_risk = "Low"
+            else:
+                new_risk = matched_student.get("risk_level", "Low")
+                
+            cursor.execute("UPDATE students SET risk_level = ? WHERE id = ?", (new_risk, student_id))
+            
+            # Log team activity
+            evaluator = conn.execute("SELECT name FROM users WHERE id = ?", (scanned_by_user_id,)).fetchone()
+            evaluator_name = evaluator['name'] if evaluator else "A team member"
+            
+            cursor.execute("""
+                INSERT INTO team_activity (user_id, student_id, activity_type, description)
+                VALUES (?, ?, 'scan', ?)
+            """, (
+                scanned_by_user_id,
+                student_id,
+                f"📂 [BATCH] {evaluator_name} scanned {subject} sheet for {matched_student['name']} (auto-matched: {matched_automatically}). Score: {score}/10."
+            ))
+            
+            results.append({
+                "filename": file.filename,
+                "success": True,
+                "assessment_id": assessment_id,
+                "student_id": student_id,
+                "student_name": matched_student["name"],
+                "roll_number": matched_student["roll_number"],
+                "matched_automatically": matched_automatically,
+                "diagnostic": {
+                    "total_score": score,
+                    "summary": diagnostic.get("summary", ""),
+                    "ai_confidence_score": diagnostic.get("ai_confidence_score", 0.0),
+                    "remediation_plan": diagnostic.get("remediation_plan", ""),
+                    "gaps": diagnostic.get("gaps", [])
+                }
+            })
+            
+        conn.commit()
+        return {"success": True, "results": results}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+# 19c. Voice Assessment Endpoint
+@app.post("/api/voice-assessment")
+async def voice_assessment(
+    scanned_by_user_id: int = Form(...),
+    file: Optional[UploadFile] = File(None),
+    transcription: Optional[str] = Form(None)
+):
+    """
+    Dictation endpoint: accepts either an audio file or direct text transcription.
+    Returns structured student diagnostic data that can be committed to the database.
+    """
+    if not file and not transcription:
+        raise HTTPException(status_code=400, detail="Provide either an audio recording or text transcription.")
+        
+    try:
+        if file:
+            audio_bytes = await file.read()
+            mime_type = file.content_type or "audio/webm"
+            from analyzer import transcribe_and_extract_voice_observation
+            diagnostic = transcribe_and_extract_voice_observation(audio_bytes, mime_type)
+        else:
+            from analyzer import parse_voice_observation_text_nlp
+            diagnostic = parse_voice_observation_text_nlp(transcription)
+            
+        # Match student in the database
+        conn = get_db_connection()
+        student_name = diagnostic.get("student_name", "")
+        student = conn.execute("SELECT id, name, roll_number, grade, section FROM students WHERE LOWER(name) LIKE LOWER(?) LIMIT 1", (f"%{student_name}%",)).fetchone()
+        
+        student_info = None
+        if student:
+            student_info = dict(student)
+            diagnostic["student_id"] = student_info["id"]
+            diagnostic["student_name"] = student_info["name"]
+            diagnostic["roll_number"] = student_info["roll_number"]
+            diagnostic["grade"] = student_info["grade"]
+            diagnostic["section"] = student_info["section"]
+            diagnostic["matched_automatically"] = True
+        else:
+            # Pick a fallback first student if not matched
+            first_student = conn.execute("SELECT id, name, roll_number, grade, section FROM students LIMIT 1").fetchone()
+            if first_student:
+                student_info = dict(first_student)
+                diagnostic["student_id"] = student_info["id"]
+                diagnostic["student_name"] = student_info["name"]
+                diagnostic["roll_number"] = student_info["roll_number"]
+                diagnostic["grade"] = student_info["grade"]
+                diagnostic["section"] = student_info["section"]
+                diagnostic["matched_automatically"] = False
+            else:
+                diagnostic["student_id"] = None
+                diagnostic["matched_automatically"] = False
+                
+        conn.close()
+        return diagnostic
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # 20. Fetch class-level analytics
 @app.get("/api/analytics")
