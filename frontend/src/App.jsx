@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
+  PrincipalDashboard, 
+  ClassTeacherDashboard, 
+  SubjectTeacherDashboard, 
+  ParentDashboard 
+} from './components/RoleDashboards';
+import { 
   Users, 
   TrendingUp, 
   BookOpen, 
@@ -1043,160 +1049,49 @@ function App() {
         <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8 relative z-0">
           
           {/* TAB 1: CLASS ANALYTICS & EWS RADAR */}
-          {activeTab === 'dashboard' && (
+          {activeTab === 'dashboard' && activeUser && (
             <div className="space-y-6">
-              
-              {/* EWS Dropout Risk Monitor Panel */}
-              <div className="bg-white/80 backdrop-blur-lg border border-white rounded-3xl p-6 shadow-xl shadow-indigo-100/40">
-                <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-                  <div className="flex items-center space-x-2.5">
-                    <ShieldAlert className="w-5 h-5 text-brand-600" />
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">🚨 Systemic EWS Dropout Radar</h3>
-                      <p className="text-xs text-slate-400">Classroom analytics and early warning dropout alarms</p>
-                    </div>
-                  </div>
-                  <div className="flex space-x-3 text-xs font-bold">
-                    <span className="flex items-center px-3 py-1 rounded-full bg-rose-50 border border-rose-100 text-rose-700">
-                      High Risk: {analytics.ews_risks?.High || 0}
-                    </span>
-                    <span className="flex items-center px-3 py-1 rounded-full bg-amber-50 border border-amber-100 text-amber-700">
-                      Medium Risk: {analytics.ews_risks?.Medium || 0}
-                    </span>
-                    <span className="flex items-center px-3 py-1 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-700">
-                      Low Risk: {analytics.ews_risks?.Low || 0}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Alarm Feed */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {students.filter(s => s.risk_level === 'High' || s.risk_level === 'Medium').map(student => (
-                    <div 
-                      key={student.id} 
-                      className={`p-5 rounded-2xl border flex flex-col justify-between hover:-translate-y-1 hover:shadow-xl transition-all duration-300 ${
-                        student.risk_level === 'High' 
-                          ? 'bg-rose-50/70 border-rose-100 shadow-rose-100/50' 
-                          : 'bg-amber-50/70 border-amber-100 shadow-amber-100/50'
-                      }`}
-                    >
-                      <div>
-                        <div className="flex justify-between items-center mb-2">
-                          <h4 className="text-sm font-bold text-slate-800">{student.name}</h4>
-                          <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${
-                            student.risk_level === 'High' 
-                              ? 'bg-rose-50 border-rose-200 text-rose-700' 
-                              : 'bg-amber-50 border-amber-200 text-amber-700'
-                          }`}>
-                            {student.risk_level} Risk
-                          </span>
-                        </div>
-                        <div className="space-y-1 mb-4">
-                          <p className="text-xs text-slate-600 flex items-center">
-                            <Calendar className="w-3.5 h-3.5 mr-1.5 text-slate-400" />
-                            Attendance Rate: <strong className="ml-1 text-slate-700">{student.attendance_rate}%</strong>
-                          </p>
-                          <p className="text-xs text-slate-600 flex items-center">
-                            <BookOpen className="w-3.5 h-3.5 mr-1.5 text-slate-400" />
-                            Math Diagnostic Score: <strong className="ml-1 text-slate-700">Needs Remedial</strong>
-                          </p>
-                        </div>
-                      </div>
-                      
-                      <button 
-                        onClick={() => {
-                          setInterventionStudent(student);
-                          setShowInterventionModal(true);
-                        }}
-                        className={`w-full py-2 rounded-lg text-[11px] font-bold shadow-sm transition-all flex items-center justify-center ${
-                          student.risk_level === 'High'
-                            ? 'bg-rose-600 hover:bg-rose-700 text-white'
-                            : 'bg-amber-600 hover:bg-amber-700 text-white'
-                        }`}
-                      >
-                        <ShieldAlert className="w-3.5 h-3.5 mr-1.5" />
-                        Trigger Collaborative Intervention
-                      </button>
-                    </div>
-                  ))}
-                  {students.filter(s => s.risk_level === 'High' || s.risk_level === 'Medium').length === 0 && (
-                    <div className="col-span-2 text-center py-6 text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center justify-center space-x-2">
-                      <CheckCircle className="w-5 h-5 text-emerald-600" />
-                      <p className="text-xs font-bold">All student dropout metrics are stable. No active alarms!</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              {/* Classroom Stats & Analytics */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white/80 backdrop-blur-lg border border-white rounded-3xl p-6 shadow-xl shadow-indigo-100/40 hover:-translate-y-1 transition-all duration-300">
-                  <div className="flex justify-between items-center mb-6">
-                    <div>
-                      <h3 className="text-base font-bold text-slate-800">Foundational Concept Mastery Map</h3>
-                      <p className="text-xs text-slate-500">Distribution of diagnosed proficiency levels per conceptual domain</p>
-                    </div>
-                  </div>
-
-                  <div className="h-64">
-                    {analytics.concept_gaps && analytics.concept_gaps.length > 0 ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={analytics.concept_gaps} margin={{ top: 10, right: 10, left: -10, bottom: 5 }}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                          <XAxis dataKey="concept" />
-                          <YAxis />
-                          <Tooltip />
-                          <Legend />
-                          <Bar dataKey="Mastered" fill="#10b981" radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="Needs Improvement" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="Critical Gap" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="h-full flex flex-col items-center justify-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                        <BookMarked className="w-12 h-12 text-slate-300 mb-2" />
-                        <p className="text-sm">Scan papers to compile concept mapping.</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="bg-white/80 backdrop-blur-lg border border-white rounded-3xl p-6 shadow-xl shadow-indigo-100/40 hover:-translate-y-1 transition-all duration-300">
-                  <h3 className="text-base font-bold text-slate-800 mb-4 flex items-center">
-                    <Activity className="w-5 h-5 text-brand-600 mr-2" />
-                    Shared Workspace Feed (EWS & Scan Audits)
-                  </h3>
-                  <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto pr-2 space-y-3">
-                    {activities.map((act) => (
-                      <div key={act.id} className="flex items-start space-x-3 pt-3 first:pt-0">
-                        <img src={act.avatar_url} alt={act.user_name} className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200" />
-                        <div className="flex-1">
-                          <div className="flex justify-between items-baseline">
-                            <h4 className="text-xs font-semibold text-slate-700">{act.user_name}</h4>
-                            <span className="text-[10px] text-slate-400 font-mono">
-                              {new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </div>
-                          <p className={`text-xs mt-1 leading-relaxed ${
-                            act.activity_type === 'ews_alert' ? 'text-rose-600 font-semibold bg-rose-50 p-2 rounded-lg border border-rose-100' :
-                            act.activity_type === 'intervention' ? 'text-emerald-700 font-semibold bg-emerald-50 p-2 rounded-lg border border-emerald-100' :
-                            'text-slate-600'
-                          }`}>{act.description}</p>
-                          {act.student_name && act.activity_type !== 'ews_alert' && act.activity_type !== 'intervention' && (
-                            <span className="inline-block mt-1 text-[9px] px-2 py-0.5 bg-slate-100 text-slate-500 rounded border border-slate-200">
-                              Student: {act.student_name}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                    {activities.length === 0 && (
-                      <p className="text-xs text-slate-400 text-center py-6">No collaborative activities logged yet.</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
+              {activeUser.role === 'School Principal' && (
+                <PrincipalDashboard 
+                  activeUser={activeUser}
+                  students={students}
+                  flaggedStudents={flaggedStudents}
+                  compareSections={compareSections}
+                  activities={activities}
+                  handleResolveEscalation={handleResolveEscalation}
+                />
+              )}
+              {activeUser.role === 'Class Teacher' && (
+                <ClassTeacherDashboard 
+                  activeUser={activeUser}
+                  students={students}
+                  analytics={analytics}
+                  activities={activities}
+                  setInterventionStudent={setInterventionStudent}
+                  setShowInterventionModal={setShowInterventionModal}
+                  setEscalationStudent={setEscalationStudent}
+                  setShowEscalationModal={setShowEscalationModal}
+                />
+              )}
+              {activeUser.role === 'Subject Teacher' && (
+                <SubjectTeacherDashboard 
+                  activeUser={activeUser}
+                  analytics={analytics}
+                  activities={activities}
+                  setActiveTab={setActiveTab}
+                  setScannerMode={setScannerMode}
+                />
+              )}
+              {activeUser.role === 'Parent' && selectedStudent && (
+                <ParentDashboard 
+                  activeUser={activeUser}
+                  selectedStudent={selectedStudent}
+                  studentDetail={studentDetail}
+                  parentQuizAnswers={parentQuizAnswers}
+                  setParentQuizAnswers={setParentQuizAnswers}
+                  handleSavePractice={handleSavePractice}
+                />
+              )}
             </div>
           )}
 
