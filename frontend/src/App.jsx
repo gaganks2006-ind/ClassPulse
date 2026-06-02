@@ -117,6 +117,13 @@ function App() {
   const [interventionNotes, setInterventionNotes] = useState("");
   const [isSubmittingIntervention, setIsSubmittingIntervention] = useState(false);
 
+  // Worksheet and DIKSHA Modal States
+  const [showWorksheetModal, setShowWorksheetModal] = useState(false);
+  const [activeWorksheetData, setActiveWorksheetData] = useState(null);
+  
+  const [showDikshaModal, setShowDikshaModal] = useState(false);
+  const [activeDikshaData, setActiveDikshaData] = useState(null);
+
   // Scan Modal / Form States
   const [scanSubject, setScanSubject] = useState("Mathematics");
   const [scanGrade, setScanGrade] = useState("Grade 3");
@@ -279,7 +286,8 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden text-slate-800">
+    <>
+      <div className={`flex h-screen bg-slate-50 overflow-hidden text-slate-800 ${showWorksheetModal ? 'no-print' : ''}`}>
       
       {/* 1. Sidebar Navigation */}
       <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col justify-between shadow-xl">
@@ -707,22 +715,32 @@ function App() {
                             </p>
                             
                             {/* Remedial connection to DIKSHA */}
-                            {gap.remedial_resource && (
-                              <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between">
-                                <span className="text-[10px] text-slate-400 flex items-center">
-                                  <BookOpen className="w-3.5 h-3.5 mr-1 text-brand-500" />
-                                  NEP-aligned DIKSHA Resource
-                                </span>
-                                <a 
-                                  href={gap.remedial_resource} 
-                                  target="_blank" 
-                                  rel="noreferrer"
+                            <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between no-print">
+                              <div className="flex space-x-2">
+                                <button 
+                                  onClick={() => {
+                                    setActiveWorksheetData(gap);
+                                    setShowWorksheetModal(true);
+                                  }}
+                                  className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-[10px] font-bold shadow-sm transition-all flex items-center"
+                                >
+                                  <Printer className="w-3 h-3 mr-1.5 text-slate-500" />
+                                  Generate Remedial Worksheet
+                                </button>
+                              </div>
+                              {gap.remedial_resource && (
+                                <button 
+                                  onClick={() => {
+                                    setActiveDikshaData(gap);
+                                    setShowDikshaModal(true);
+                                  }}
                                   className="text-[10px] text-brand-600 hover:text-brand-700 font-bold hover:underline flex items-center"
                                 >
+                                  <BookOpen className="w-3.5 h-3.5 mr-1 text-brand-500" />
                                   Access Learning Module ➡️
-                                </a>
-                              </div>
-                            )}
+                                </button>
+                              )}
+                            </div>
                           </div>
                         ))}
 
@@ -773,14 +791,15 @@ function App() {
                                 </p>
                               </div>
                               
-                              <a 
-                                href={gap.remedial_resource} 
-                                target="_blank" 
-                                rel="noreferrer"
+                              <button 
+                                onClick={() => {
+                                  setActiveDikshaData(gap);
+                                  setShowDikshaModal(true);
+                                }}
                                 className="w-full py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-[10px] font-bold shadow-sm transition-all flex items-center justify-center no-print"
                               >
                                 Open in DIKSHA Hub ➡️
-                              </a>
+                              </button>
                             </div>
                           ))}
                         </div>
@@ -1365,6 +1384,177 @@ function App() {
       )}
 
     </div>
+
+      {/* 4. WORKSHEET GENERATOR MODAL */}
+      {showWorksheetModal && activeWorksheetData && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 print:bg-white print:p-0 print:block">
+          <div className="bg-white rounded-3xl border border-slate-200 w-full max-w-4xl h-[90vh] flex flex-col shadow-2xl print:shadow-none print:border-none print:w-full print:h-auto print:max-w-none print:rounded-none">
+            {/* Modal Header (No Print) */}
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-3xl no-print">
+              <div className="flex items-center space-x-2">
+                <Printer className="w-5 h-5 text-brand-600" />
+                <h3 className="text-sm font-bold text-slate-800">Printable Remedial Worksheet</h3>
+              </div>
+              <div className="flex space-x-2">
+                <button onClick={() => window.print()} className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center">
+                  <Printer className="w-4 h-4 mr-1.5" />
+                  Print Now
+                </button>
+                <button onClick={() => setShowWorksheetModal(false)} className="p-2 text-slate-400 hover:bg-slate-200 hover:text-slate-600 rounded-xl transition-all">
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            
+            {/* Printable Content Area */}
+            <div className="flex-1 overflow-y-auto p-8 print:p-0 print:overflow-visible worksheet-content">
+              {/* Worksheet Document Header */}
+              <div className="border-b-4 border-slate-800 pb-4 mb-8 flex justify-between items-end">
+                <div>
+                  <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight">ClassPulse Practice</h1>
+                  <h2 className="text-lg font-bold text-slate-600 mt-1">Focus Area: {activeWorksheetData.concept}</h2>
+                </div>
+                <div className="text-right space-y-2">
+                  <div className="flex items-center space-x-2 text-sm justify-end">
+                    <span className="font-bold text-slate-700">Name:</span>
+                    <div className="w-48 border-b-2 border-slate-400 font-mono text-center text-slate-800">{studentDetail?.student?.name}</div>
+                  </div>
+                  <div className="flex items-center space-x-2 text-sm justify-end">
+                    <span className="font-bold text-slate-700">Date:</span>
+                    <div className="w-48 border-b-2 border-slate-400 font-mono text-center text-slate-800">{new Date().toLocaleDateString()}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Instructions */}
+              <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl mb-8 print:bg-white print:border-slate-800 print:rounded-none">
+                <h3 className="font-bold text-slate-800 flex items-center">
+                  <BookOpen className="w-4 h-4 mr-2 text-brand-600 print:text-slate-800" /> Teacher's Advice
+                </h3>
+                <p className="text-sm text-slate-600 mt-2 print:text-slate-800">{activeWorksheetData.misconception_details}</p>
+              </div>
+
+              {/* Practice Area */}
+              <div className="grid grid-cols-2 gap-8 print:gap-12 worksheet-grid">
+                {[1, 2, 3, 4, 5, 6].map((num) => (
+                  <div key={num} className="border-2 border-slate-300 rounded-xl p-4 min-h-[160px] flex flex-col print:border-slate-800 print:rounded-none">
+                    <span className="font-bold text-slate-400 text-sm mb-4 print:text-slate-600">Q{num}.</span>
+                    <div className="flex-1 border-dashed border-2 border-slate-200 bg-slate-50/50 print:bg-white print:border-slate-300"></div>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="mt-12 text-center text-xs text-slate-400 font-mono print:text-slate-500">
+                Generated by ClassPulse AI • Designed for {studentDetail?.student?.name}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. DIKSHA EDUCATIONAL HUB OVERLAY */}
+      {showDikshaModal && activeDikshaData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => setShowDikshaModal(false)}></div>
+          
+          <div className="relative bg-white/90 backdrop-blur-2xl rounded-3xl border border-white/50 w-full max-w-5xl h-[85vh] flex shadow-2xl overflow-hidden animate-scale-up z-10">
+            {/* Sidebar with modules */}
+            <div className="w-72 bg-brand-900/95 backdrop-blur-md text-white p-6 flex flex-col">
+              <div className="flex items-center space-x-2 mb-8">
+                <Award className="w-8 h-8 text-brand-300" />
+                <div>
+                  <h3 className="text-lg font-black tracking-wider leading-none">DIKSHA Hub</h3>
+                  <p className="text-[10px] text-brand-300 uppercase tracking-widest mt-1">NEP 2020 Aligned</p>
+                </div>
+              </div>
+
+              <div className="space-y-4 flex-1">
+                <div className="px-3 py-2 bg-brand-800 rounded-xl border border-brand-700/50 cursor-pointer">
+                  <h4 className="text-sm font-bold text-white flex items-center">
+                    <BookOpen className="w-4 h-4 mr-2 text-brand-300" /> Topic Review
+                  </h4>
+                </div>
+                <div className="px-3 py-2 hover:bg-brand-800/50 rounded-xl cursor-pointer transition-colors text-brand-100">
+                  <h4 className="text-sm font-bold flex items-center">
+                    <Activity className="w-4 h-4 mr-2 text-brand-300/70" /> Activity Steps
+                  </h4>
+                </div>
+                <div className="px-3 py-2 hover:bg-brand-800/50 rounded-xl cursor-pointer transition-colors text-brand-100">
+                  <h4 className="text-sm font-bold flex items-center">
+                    <MessageSquare className="w-4 h-4 mr-2 text-brand-300/70" /> Study Notes (EN/HI)
+                  </h4>
+                </div>
+              </div>
+              
+              <div className="pt-4 border-t border-brand-800 text-xs text-brand-300/80">
+                Targeting: <strong className="text-white">{activeDikshaData.concept}</strong>
+              </div>
+            </div>
+
+            {/* Main Content */}
+            <div className="flex-1 flex flex-col bg-slate-50/50">
+              <div className="p-4 border-b border-slate-200/50 flex justify-between items-center bg-white/50 backdrop-blur-sm">
+                <h3 className="text-base font-bold text-slate-800 flex items-center">
+                  <Sparkles className="w-5 h-5 text-brand-600 mr-2" /> Play-Based Learning Module
+                </h3>
+                <button onClick={() => setShowDikshaModal(false)} className="p-2 text-slate-500 hover:bg-slate-200/50 hover:text-slate-700 rounded-xl transition-all">
+                  <XCircle className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-8 space-y-6">
+                
+                {/* Simulated Play-based Card */}
+                <div className="bg-white/80 backdrop-blur-md border border-white rounded-3xl p-8 shadow-xl relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-48 h-48 bg-brand-200 rounded-full blur-3xl -mr-16 -mt-16 opacity-50 pointer-events-none"></div>
+                  <div className="absolute bottom-0 left-0 w-32 h-32 bg-emerald-200 rounded-full blur-3xl -ml-10 -mb-10 opacity-30 pointer-events-none"></div>
+                  
+                  <h4 className="text-2xl font-black text-slate-800 mb-2 relative z-10">Concept: {activeDikshaData.concept}</h4>
+                  <p className="text-slate-600 text-sm mb-8 relative z-10">Use these visual analogies and manipulatives to clarify the misconception in the classroom.</p>
+                  
+                  <div className="grid grid-cols-2 gap-6 relative z-10">
+                    <div className="bg-gradient-to-br from-amber-50/90 to-orange-50/90 border border-amber-100 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow">
+                      <h5 className="font-bold text-amber-800 mb-3 text-sm flex items-center">
+                        <UserCheck className="w-4 h-4 mr-2" /> Classroom Activity Steps
+                      </h5>
+                      <ul className="list-disc list-inside text-sm text-amber-900/90 space-y-2.5 leading-relaxed">
+                        <li>Gather 10 blocks (ones) and 1 long rod (tens).</li>
+                        <li>Ask the student to count out 14 blocks.</li>
+                        <li>Guide them to trade 10 ones blocks for 1 tens rod.</li>
+                        <li>Show how this relates directly to carrying over in addition algorithms.</li>
+                      </ul>
+                    </div>
+                    
+                    <div className="bg-gradient-to-br from-blue-50/90 to-indigo-50/90 border border-blue-100 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow">
+                      <h5 className="font-bold text-blue-800 mb-3 text-sm flex items-center">
+                        <MessageSquare className="w-4 h-4 mr-2" /> Bilingual Study Notes
+                      </h5>
+                      <div className="space-y-4">
+                        <div className="bg-white/80 p-3.5 rounded-xl border border-blue-100/50 shadow-sm">
+                          <p className="text-sm font-semibold text-slate-800">EN: When you have 10 or more in the ones place, bundle them into a ten.</p>
+                        </div>
+                        <div className="bg-white/80 p-3.5 rounded-xl border border-blue-100/50 shadow-sm">
+                          <p className="text-sm font-semibold text-slate-800 font-sans">HI: जब इकाई के स्थान पर 10 या अधिक हो जाएं, तो उन्हें एक दहाई में बदल दें।</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-8 flex justify-end relative z-10">
+                    {activeDikshaData.remedial_resource && (
+                      <a href={activeDikshaData.remedial_resource} target="_blank" rel="noreferrer" className="px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-brand-600/30 transition-all flex items-center hover:scale-[1.02] active:scale-[0.98]">
+                        Launch Official DIKSHA Video <Activity className="w-4 h-4 ml-2" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

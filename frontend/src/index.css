@@ -22,8 +22,8 @@ body {
     padding: 0 !important;
   }
   
-  /* Reset layout constraints for printing */
-  .grid {
+  /* Reset layout constraints for printing, except for worksheet */
+  .grid:not(.worksheet-grid) {
     display: block !important;
   }
   
