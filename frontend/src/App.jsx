@@ -34,7 +34,8 @@ import {
   BarChart3,
   FileSpreadsheet,
   Bell,
-  Mail
+  Mail,
+  LogOut
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -85,6 +86,10 @@ function App() {
   const [users, setUsers] = useState([]);
   const [students, setStudents] = useState([]);
   const [activeUser, setActiveUser] = useState(null);
+  const [loginUsernameInput, setLoginUsernameInput] = useState("");
+  const [loginPasswordInput, setLoginPasswordInput] = useState("");
+  const [loginErrorMsg, setLoginErrorMsg] = useState("");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [studentDetail, setStudentDetail] = useState(null);
   const [analytics, setAnalytics] = useState({ concept_gaps: [], subject_performances: [], ews_risks: { Low: 0, Medium: 0, High: 0 } });
@@ -225,9 +230,6 @@ function App() {
       const usersData = await usersRes.json();
       setUsers(usersData);
       if (usersData.length > 0) {
-        // Set Gagan K S as default logged-in member
-        const defaultUser = usersData.find(u => u.name.includes("Gagan")) || usersData[0];
-        setActiveUser(defaultUser);
         setInterventionAssignee(usersData[0].id.toString());
       }
 
@@ -842,7 +844,127 @@ function App() {
     }
   };
 
-  const handleStudentLogout = () => {
+  const handleLoginSubmit = async (e) => {
+    if (e) e.preventDefault();
+    setLoginErrorMsg("");
+    if (!loginUsernameInput.trim() || !loginPasswordInput.trim()) {
+      setLoginErrorMsg("Please enter both Username/Roll Number and Password.");
+      return;
+    }
+    setIsLoggingIn(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: loginUsernameInput.trim(),
+          password: loginPasswordInput.trim()
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const loggedUser = data.user;
+        setActiveUser(loggedUser);
+        
+        // If it's a student (role is 'Student'), sync with the student portal
+        if (loggedUser.role === 'Student') {
+          try {
+            const detailRes = await fetch(`${API_BASE}/students/${loggedUser.id}`);
+            if (detailRes.ok) {
+              const detailData = await detailRes.json();
+              setStudentSession(detailData.student);
+              fetchStudentDashboard(loggedUser.id);
+            } else {
+              setStudentSession({
+                id: loggedUser.id,
+                name: loggedUser.name,
+                roll_number: loggedUser.email,
+                grade: "Grade 3",
+                section: "A",
+                attendance_rate: 85.0,
+                risk_level: "Medium"
+              });
+              fetchStudentDashboard(loggedUser.id);
+            }
+          } catch (err) {
+            console.error("Error syncing student details", err);
+          }
+          setPortalMode("student");
+        } else {
+          setPortalMode("staff");
+          setStudentSession(null);
+        }
+      } else {
+        setLoginErrorMsg(data.detail || "Authentication failed.");
+      }
+    } catch (err) {
+      console.error(err);
+      setLoginErrorMsg("Network error. Please make sure the backend server is running.");
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleQuickDemoLogin = async (username, password) => {
+    setLoginUsernameInput(username);
+    setLoginPasswordInput(password);
+    setLoginErrorMsg("");
+    setIsLoggingIn(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: username,
+          password: password
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const loggedUser = data.user;
+        setActiveUser(loggedUser);
+        
+        if (loggedUser.role === 'Student') {
+          try {
+            const detailRes = await fetch(`${API_BASE}/students/${loggedUser.id}`);
+            if (detailRes.ok) {
+              const detailData = await detailRes.json();
+              setStudentSession(detailData.student);
+              fetchStudentDashboard(loggedUser.id);
+            } else {
+              setStudentSession({
+                id: loggedUser.id,
+                name: loggedUser.name,
+                roll_number: loggedUser.email,
+                grade: "Grade 3",
+                section: "A",
+                attendance_rate: 85.0,
+                risk_level: "Medium"
+              });
+              fetchStudentDashboard(loggedUser.id);
+            }
+          } catch (err) {
+            console.error(err);
+          }
+          setPortalMode("student");
+        } else {
+          setPortalMode("staff");
+          setStudentSession(null);
+        }
+      } else {
+        setLoginErrorMsg(data.detail || "Demo login failed.");
+      }
+    } catch (err) {
+      console.error(err);
+      setLoginErrorMsg("Network error. Please make sure the backend server is running.");
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleLogout = () => {
+    setActiveUser(null);
+    setPortalMode("staff");
     setStudentSession(null);
     setStudentDashboardData(null);
     setStudentRollNumberInput("");
@@ -851,6 +973,10 @@ function App() {
     setStudentAnswers({});
     setStudentQuizScore(null);
     setStudentQuizCompleted(false);
+  };
+
+  const handleStudentLogout = () => {
+    handleLogout();
   };
 
   const handleGenerateQuiz = async (subject, concept) => {
@@ -1580,6 +1706,191 @@ function App() {
     );
   };
 
+  const renderLoginScreen = () => {
+    const demoAccounts = [
+      {
+        role: "School Principal",
+        name: "Vikram Singh",
+        username: "vikram@shiksha.org",
+        password: "password123",
+        avatar: "https://api.dicebear.com/7.x/adventurer/svg?seed=Vikram",
+        desc: "High-level overview & EWS Dropout Reports"
+      },
+      {
+        role: "Class Teacher",
+        name: "Aarav Sharma",
+        username: "aarav@shiksha.org",
+        password: "password123",
+        avatar: "https://api.dicebear.com/7.x/adventurer/svg?seed=Aarav",
+        desc: "Classroom cockpit, scan exams, parents CRM"
+      },
+      {
+        role: "Subject Teacher",
+        name: "Gagan K S",
+        username: "gagan@shiksha.org",
+        password: "password123",
+        avatar: "https://api.dicebear.com/7.x/adventurer/svg?seed=Gagan",
+        desc: "Remediation planning & gap tracking"
+      },
+      {
+        role: "Parent",
+        name: "Ramesh Kumar (Parent)",
+        username: "parent.rahul@shiksha.org",
+        password: "password123",
+        avatar: "https://api.dicebear.com/7.x/adventurer/svg?seed=Ramesh",
+        desc: "Supervise practice, review alerts & analytics"
+      },
+      {
+        role: "Student",
+        name: "Rahul Kumar (Student)",
+        username: "G3-01",
+        password: "password123",
+        avatar: "https://api.dicebear.com/7.x/adventurer/svg?seed=Rahul",
+        desc: "Practice Room & mastery milestones"
+      }
+    ];
+
+    return (
+      <div className="bg-gradient-to-tr from-slate-950 via-indigo-950 to-purple-950 min-h-screen relative overflow-hidden flex flex-col justify-center items-center p-4 md:p-8 font-sans">
+        {/* Floating background ambient glow */}
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-500/10 rounded-full blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-[120px] pointer-events-none" />
+
+        <div className="max-w-xl w-full z-10 space-y-6">
+          {/* Frosted glassmorphic card */}
+          <div className="bg-white/5 backdrop-blur-2xl border border-white/10 rounded-3xl p-8 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] space-y-6 text-white transition-all duration-300">
+            
+            {/* Header section with premium AI Sparks logo */}
+            <div className="text-center space-y-3">
+              <div className="inline-flex p-3 bg-indigo-500/20 text-indigo-300 rounded-2xl border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.2)]">
+                <Sparkles className="w-8 h-8 animate-pulse" />
+              </div>
+              <h1 className="text-3xl font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-indigo-200 via-purple-250 to-pink-200 uppercase">
+                ClassPulse
+              </h1>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">
+                Unified Learning ERP & EWS Radar
+              </p>
+            </div>
+
+            {/* Login form */}
+            <form onSubmit={handleLoginSubmit} className="space-y-4">
+              {loginErrorMsg && (
+                <div className="bg-rose-500/20 border border-rose-500/40 text-rose-250 px-4 py-3 rounded-2xl text-xs font-bold text-center">
+                  {loginErrorMsg}
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-black uppercase text-indigo-300 tracking-wider">
+                  Username / Unique ID / Email / Roll No
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                    <User className="w-4 h-4" />
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. gagan@shiksha.org or G3-01"
+                    value={loginUsernameInput}
+                    onChange={(e) => setLoginUsernameInput(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 bg-slate-950/40 border border-white/10 focus:border-indigo-400 focus:bg-slate-950/60 rounded-2xl text-sm text-white placeholder-slate-500 outline-none transition-all duration-200"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <label className="block text-[10px] font-black uppercase text-indigo-300 tracking-wider">
+                    Password
+                  </label>
+                </div>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </span>
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••"
+                    value={loginPasswordInput}
+                    onChange={(e) => setLoginPasswordInput(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 bg-slate-950/40 border border-white/10 focus:border-indigo-400 focus:bg-slate-950/60 rounded-2xl text-sm text-white placeholder-slate-500 outline-none transition-all duration-200"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoggingIn}
+                className="w-full py-3.5 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-2xl text-xs font-black tracking-wider uppercase shadow-xl shadow-indigo-950/50 hover:shadow-indigo-500/25 active:scale-98 disabled:opacity-55 disabled:cursor-not-allowed transition-all duration-200 cursor-pointer"
+              >
+                {isLoggingIn ? (
+                  <div className="flex items-center justify-center space-x-2">
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Signing in...</span>
+                  </div>
+                ) : (
+                  <span>Access Terminal</span>
+                )}
+              </button>
+            </form>
+          </div>
+
+          {/* Quick Demo Accounts Selector Deck */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between px-1">
+              <h3 className="text-xs font-black uppercase tracking-wider text-indigo-300">
+                Quick Demo Accounts Selector
+              </h3>
+              <span className="text-[9px] px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 font-bold border border-indigo-500/20">
+                Evaluation Deck
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {demoAccounts.map((acc, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  onClick={() => handleQuickDemoLogin(acc.username, acc.password)}
+                  disabled={isLoggingIn}
+                  className="bg-white/5 hover:bg-white/10 active:scale-98 border border-white/10 rounded-2xl p-3 flex items-start space-x-3 text-left transition-all duration-200 group cursor-pointer"
+                >
+                  <img
+                    src={acc.avatar}
+                    alt={acc.name}
+                    className="w-9 h-9 rounded-full bg-slate-900 border border-white/10 group-hover:border-indigo-400 transition-colors flex-shrink-0"
+                  />
+                  <div className="truncate">
+                    <div className="flex items-center space-x-1.5">
+                      <span className="text-[10px] font-black uppercase text-brand-300 tracking-wider">
+                        {acc.role}
+                      </span>
+                    </div>
+                    <h4 className="text-xs font-bold text-white leading-tight mt-0.5 truncate">
+                      {acc.name}
+                    </h4>
+                    <p className="text-[9px] text-slate-455 mt-1 line-clamp-1 group-hover:text-slate-300 transition-colors">
+                      {acc.desc}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  if (!activeUser) {
+    return renderLoginScreen();
+  }
+
   if (portalMode === "student") {
     return renderStudentPortal();
   }
@@ -1692,6 +2003,18 @@ function App() {
                   <span className={`w-1.5 h-1.5 rounded-full ${user.status === 'Active' ? 'bg-green-400' : 'bg-slate-600'}`} />
                 </button>
               ))}
+              <div className="border-t border-slate-800 my-1 pt-1">
+                <button
+                  onClick={() => {
+                    handleLogout();
+                    setShowProfileDropdown(false);
+                  }}
+                  className="w-full flex items-center space-x-2.5 p-2 rounded-lg text-left hover:bg-rose-950/40 text-rose-450 hover:text-rose-200 transition-all duration-150 cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span className="text-xs font-extrabold">Sign Out Session</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -1874,6 +2197,18 @@ function App() {
                         <span className={`w-1 h-1 rounded-full ${user.status === 'Active' ? 'bg-green-450' : 'bg-slate-650'}`} />
                       </button>
                     ))}
+                    <div className="border-t border-slate-800 my-1 pt-1">
+                      <button
+                        onClick={() => {
+                          handleLogout();
+                          setShowProfileDropdown(false);
+                        }}
+                        className="w-full flex items-center space-x-2.5 p-2 rounded-lg text-left hover:bg-rose-950/40 text-rose-450 hover:text-rose-200 transition-all duration-150 cursor-pointer"
+                      >
+                        <LogOut className="w-4 h-4 text-rose-400" />
+                        <span className="text-xs font-bold text-rose-400">Sign Out</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
