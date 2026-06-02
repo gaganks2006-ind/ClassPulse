@@ -125,6 +125,53 @@ def init_db():
             FOREIGN KEY (student_id) REFERENCES students(id)
         )
     """)
+
+    # 9. Teacher Notifications (in-app alerts for risk level changes)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            student_id INTEGER,
+            type TEXT NOT NULL, -- 'risk_change', 'escalation', 'parent_alert', 'digest'
+            title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            is_read INTEGER DEFAULT 0,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (student_id) REFERENCES students(id)
+        )
+    """)
+
+    # 10. Parent Alerts Log (WhatsApp/SMS alert records)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS parent_alerts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            parent_name TEXT,
+            alert_type TEXT DEFAULT 'SMS', -- 'SMS', 'WhatsApp', 'Email'
+            message TEXT NOT NULL,
+            status TEXT DEFAULT 'Sent', -- 'Sent', 'Delivered', 'Failed'
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (student_id) REFERENCES students(id)
+        )
+    """)
+
+    # 11. Escalation Workflow (flag students to principal)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS escalations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            flagged_by_user_id INTEGER NOT NULL,
+            reason TEXT NOT NULL,
+            priority TEXT DEFAULT 'High', -- 'Critical', 'High', 'Medium'
+            status TEXT DEFAULT 'Open', -- 'Open', 'Acknowledged', 'Resolved'
+            principal_notes TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            resolved_at DATETIME,
+            FOREIGN KEY (student_id) REFERENCES students(id),
+            FOREIGN KEY (flagged_by_user_id) REFERENCES users(id)
+        )
+    """)
     
     # Seed collaborating team members with cleaned RBAC roles (includes mock parents)
     cursor.execute("SELECT COUNT(*) FROM users")

@@ -26,7 +26,9 @@ import {
   Download,
   Grid3X3,
   BarChart3,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Bell,
+  Mail
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -158,6 +160,25 @@ function App() {
   const [compareGrade, setCompareGrade] = useState('Grade 3');
   const [isExporting, setIsExporting] = useState(false);
 
+  // Communication & Alerts States
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false);
+  const [showParentAlertModal, setShowParentAlertModal] = useState(false);
+  const [parentAlertStudent, setParentAlertStudent] = useState(null);
+  const [parentAlertType, setParentAlertType] = useState("WhatsApp");
+  const [parentAlertLog, setParentAlertLog] = useState([]);
+  const [isSendingParentAlert, setIsSendingParentAlert] = useState(false);
+  const [showEscalationModal, setShowEscalationModal] = useState(false);
+  const [escalationStudent, setEscalationStudent] = useState(null);
+  const [escalationReason, setEscalationReason] = useState("Critical risk alert requiring immediate principal review.");
+  const [escalationPriority, setEscalationPriority] = useState("High");
+  const [isEscalating, setIsEscalating] = useState(false);
+  const [flaggedStudents, setFlaggedStudents] = useState([]);
+  const [weeklyDigest, setWeeklyDigest] = useState(null);
+  const [teacherEmail, setTeacherEmail] = useState("teacher@school.edu");
+  const [isSendingDigest, setIsSendingDigest] = useState(false);
+
 
   useEffect(() => {
     fetchInitialData();
@@ -204,6 +225,10 @@ function App() {
       const reportRes = await fetch(`${API_BASE}/ews/report`);
       const reportData = await reportRes.json();
       setEwsReport(reportData);
+
+      // 6. Fetch Notifications & Escalations
+      fetchNotifications();
+      fetchFlaggedStudents();
     } catch (e) {
       console.error("Failed to fetch initial data, check API connection.", e);
     }
@@ -548,6 +573,174 @@ function App() {
     finally { setIsExporting(false); }
   };
 
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/notifications`);
+      const data = await res.json();
+      setNotifications(data);
+      const countRes = await fetch(`${API_BASE}/notifications/count`);
+      const countData = await countRes.json();
+      setUnreadCount(countData.unread_count);
+    } catch (e) { console.error("Failed to fetch notifications", e); }
+  };
+
+  const markNotificationRead = async (id) => {
+    try {
+      await fetch(`${API_BASE}/notifications/mark-read`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notification_id: id })
+      });
+      fetchNotifications();
+    } catch (e) { console.error("Failed to mark notification read", e); }
+  };
+
+  const markAllNotificationsRead = async () => {
+    try {
+      await fetch(`${API_BASE}/notifications/mark-read`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mark_all: true })
+      });
+      fetchNotifications();
+    } catch (e) { console.error("Failed to mark all read", e); }
+  };
+
+  const fetchParentAlertLog = async (studentId) => {
+    try {
+      const res = await fetch(`${API_BASE}/alerts/parent-alert-log?student_id=${studentId}`);
+      const data = await res.json();
+      setParentAlertLog(data);
+    } catch (e) { console.error("Failed to fetch parent alert log", e); }
+  };
+
+  const handleSendParentAlert = async (e) => {
+    e.preventDefault();
+    if (!parentAlertStudent) return;
+    setIsSendingParentAlert(true);
+    try {
+      const res = await fetch(`${API_BASE}/alerts/parent-alert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          student_id: parentAlertStudent.id,
+          alert_type: parentAlertType
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(`Parent alert successfully triggered!\n\nMessage preview:\n${data.alert_preview}`);
+        fetchParentAlertLog(parentAlertStudent.id);
+        fetchNotifications();
+      } else {
+        alert("Failed to send parent alert: " + data.detail);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Alert trigger failed.");
+    } finally {
+      setIsSendingParentAlert(false);
+    }
+  };
+
+  const fetchFlaggedStudents = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/escalation/flagged?status=Open`);
+      const data = await res.json();
+      setFlaggedStudents(data);
+    } catch (e) { console.error("Failed to fetch flagged students", e); }
+  };
+
+  const handleFlagEscalation = async (e) => {
+    e.preventDefault();
+    if (!escalationStudent || !activeUser) return;
+    setIsEscalating(true);
+    try {
+      const res = await fetch(`${API_BASE}/escalation/flag`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          student_id: escalationStudent.id,
+          flagged_by_user_id: activeUser.id,
+          reason: escalationReason,
+          priority: escalationPriority
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message);
+        setShowEscalationModal(false);
+        fetchNotifications();
+        fetchFlaggedStudents();
+        fetchInitialData();
+      } else {
+        alert("Failed to escalate: " + data.detail);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsEscalating(false);
+    }
+  };
+
+  const handleResolveEscalation = async (escalationId, principalNotes) => {
+    try {
+      const res = await fetch(`${API_BASE}/escalation/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          escalation_id: escalationId,
+          principal_notes: principalNotes
+        })
+      });
+      if (res.ok) {
+        alert("Escalation resolved successfully!");
+        fetchFlaggedStudents();
+        fetchInitialData();
+        fetchNotifications();
+      } else {
+        alert("Failed to resolve escalation.");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchWeeklyDigest = async (grade = 'Grade 3', section = 'A') => {
+    try {
+      const res = await fetch(`${API_BASE}/digest/weekly-summary?grade=${encodeURIComponent(grade)}&section=${section}`);
+      const data = await res.json();
+      setWeeklyDigest(data);
+    } catch (e) { console.error("Failed to fetch weekly digest", e); }
+  };
+
+  const handleSendDigestEmail = async (e) => {
+    e.preventDefault();
+    setIsSendingDigest(true);
+    try {
+      const res = await fetch(`${API_BASE}/digest/send-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipient_email: teacherEmail,
+          grade: weeklyDigest?.grade || 'Grade 3',
+          section: weeklyDigest?.section || 'A'
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message);
+        fetchNotifications();
+      } else {
+        alert("Failed to send digest: " + data.detail);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSendingDigest(false);
+    }
+  };
+
 
   return (
     <>
@@ -696,9 +889,92 @@ function App() {
           </div>
           
           <div className="flex items-center space-x-4">
+            {/* Notification Bell */}
+            <div className="relative">
+              <button 
+                onClick={() => {
+                  setShowNotificationsDropdown(!showNotificationsDropdown);
+                  fetchNotifications();
+                }}
+                className="p-2 text-slate-400 hover:text-slate-650 hover:bg-slate-100 rounded-full transition-all border border-slate-200 relative cursor-pointer"
+                title="In-App Notifications"
+              >
+                <Bell className="w-4 h-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center border border-white animate-bounce">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {showNotificationsDropdown && (
+                <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-2xl shadow-2xl p-4 z-50 animate-scale-up space-y-3 max-h-96 overflow-y-auto">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Teacher Alerts ({unreadCount})</h4>
+                    {unreadCount > 0 && (
+                      <button 
+                        onClick={markAllNotificationsRead}
+                        className="text-[10px] text-brand-600 hover:underline font-bold"
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    {notifications.length > 0 ? (
+                      notifications.map(notif => {
+                        const types = {
+                          'risk_change': { emoji: '⚠️', bg: 'bg-amber-50 text-amber-700 border-amber-100' },
+                          'escalation': { emoji: '🚨', bg: 'bg-rose-50 text-rose-700 border-rose-100' },
+                          'parent_alert': { emoji: '📱', bg: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
+                          'digest': { emoji: '📊', bg: 'bg-indigo-50 text-indigo-700 border-indigo-100' }
+                        };
+                        const config = types[notif.type] || { emoji: '🔔', bg: 'bg-slate-50 text-slate-700 border-slate-100' };
+                        return (
+                          <div 
+                            key={notif.id}
+                            className={`p-2.5 rounded-xl border text-[11px] transition-all flex items-start space-x-2.5 relative ${
+                              notif.is_read ? 'bg-white border-slate-100 opacity-60' : 'bg-slate-50 border-slate-200 shadow-sm'
+                            }`}
+                          >
+                            <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs flex-shrink-0 ${config.bg}`}>
+                              {config.emoji}
+                            </div>
+                            <div className="flex-1 space-y-0.5">
+                              <div className="font-extrabold text-slate-800 flex justify-between items-center pr-4">
+                                <span className="truncate">{notif.title}</span>
+                                {!notif.is_read && (
+                                  <button 
+                                    onClick={() => markNotificationRead(notif.id)}
+                                    className="text-[9px] text-brand-500 hover:text-brand-700 font-bold ml-1"
+                                    title="Mark as Read"
+                                  >
+                                    ✓
+                                  </button>
+                                )}
+                              </div>
+                              <p className="text-slate-500 leading-normal">{notif.message}</p>
+                              <p className="text-[9px] text-slate-400 font-mono mt-1">
+                                {new Date(notif.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="text-center py-6 text-slate-400 text-xs">
+                        No new notifications.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button 
               onClick={fetchInitialData}
-              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all border border-slate-200"
+              className="p-2 text-slate-400 hover:text-slate-650 hover:bg-slate-100 rounded-full transition-all border border-slate-200"
               title="Refresh Dashboard"
             >
               <RefreshCw className="w-4 h-4" />
@@ -942,8 +1218,29 @@ function App() {
                       </div>
                       <div className="mt-4 md:mt-0 flex space-x-2 no-print">
                         <button 
+                          onClick={() => {
+                            setParentAlertStudent(studentDetail.student);
+                            setShowParentAlertModal(true);
+                            fetchParentAlertLog(studentDetail.student.id);
+                          }}
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center cursor-pointer"
+                        >
+                          <PhoneCall className="w-4 h-4 mr-1.5" />
+                          Alert Parent
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setEscalationStudent(studentDetail.student);
+                            setShowEscalationModal(true);
+                          }}
+                          className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center cursor-pointer"
+                        >
+                          <ShieldAlert className="w-4 h-4 mr-1.5" />
+                          Escalate
+                        </button>
+                        <button 
                           onClick={() => window.print()}
-                          className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center"
+                          className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center cursor-pointer"
                         >
                           <Printer className="w-4 h-4 mr-1.5" />
                           Print Diagnostic Report
@@ -953,7 +1250,7 @@ function App() {
                             setScanStudentId(studentDetail.student.id.toString());
                             setActiveTab('scanner');
                           }}
-                          className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center"
+                          className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center cursor-pointer"
                         >
                           <UploadCloud className="w-4 h-4 mr-1.5" />
                           New Scan
@@ -2037,6 +2334,68 @@ function App() {
                   </table>
                 </div>
               </div>
+
+              {/* Escalations Hub Card */}
+              <div className="bg-white/80 backdrop-blur-lg border border-white rounded-3xl p-6 shadow-xl shadow-indigo-100/40 space-y-4">
+                <div className="flex items-center space-x-2.5 border-b border-slate-100 pb-3">
+                  <ShieldAlert className="w-5 h-5 text-rose-600 animate-pulse" />
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">🚨 Principal Escalation Inbox</h3>
+                    <p className="text-xs text-slate-400">High priority student situations flagged by teachers for administrative intervention</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {flaggedStudents.length > 0 ? (
+                    flaggedStudents.map(esc => (
+                      <div key={esc.id} className="p-5 rounded-2xl border border-rose-100 bg-rose-50/20 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-xs font-bold text-slate-800">{esc.student_name}</span>
+                            <span className="text-[10px] text-slate-450 font-mono">({esc.roll_number})</span>
+                            <span className="text-[10px] font-black uppercase tracking-wider bg-rose-100 border border-rose-200 text-rose-700 px-2 py-0.5 rounded-full">
+                              {esc.priority} Priority
+                            </span>
+                            <span className="text-[10px] font-bold bg-amber-50 border border-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                              {esc.risk_level} Risk
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-650 italic">" {esc.reason} "</p>
+                          <div className="text-[10px] text-slate-400 flex items-center space-x-2">
+                            <span>Flagged by: <strong>{esc.flagged_by_name}</strong></span>
+                            <span>•</span>
+                            <span>Date: <strong>{new Date(esc.timestamp).toLocaleDateString()}</strong></span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-2 w-full md:w-auto">
+                          <input 
+                            type="text" 
+                            id={`notes-${esc.id}`}
+                            placeholder="Resolution notes..."
+                            className="px-3 py-2 border border-slate-200 bg-white rounded-xl text-xs focus:ring-2 focus:ring-rose-500 outline-none flex-grow md:w-48"
+                          />
+                          <button
+                            onClick={() => {
+                              const notesInput = document.getElementById(`notes-${esc.id}`);
+                              const notes = notesInput ? notesInput.value : "";
+                              handleResolveEscalation(esc.id, notes);
+                            }}
+                            className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex-shrink-0 cursor-pointer"
+                          >
+                            Resolve
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-slate-400 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 text-xs">
+                      No active teacher escalations at this time.
+                    </div>
+                  )}
+                </div>
+              </div>
+
             </div>
           )}
 
@@ -2050,7 +2409,8 @@ function App() {
                   { key: 'heatmap', label: 'Risk Heatmap', icon: '🗺️' },
                   { key: 'attendance-ews', label: 'Attendance → EWS', icon: '📋' },
                   { key: 'compare', label: 'Compare Sections', icon: '⚖️' },
-                  { key: 'export', label: 'Export Reports', icon: '📥' }
+                  { key: 'export', label: 'Export Reports', icon: '📥' },
+                  { key: 'digest', label: 'Weekly Digest', icon: '✉️' }
                 ].map(tab => (
                   <button
                     key={tab.key}
@@ -2060,6 +2420,7 @@ function App() {
                       if (tab.key === 'heatmap') fetchHeatmapData();
                       if (tab.key === 'attendance-ews') fetchAttendanceEws();
                       if (tab.key === 'compare') fetchCompareSections(compareGrade);
+                      if (tab.key === 'digest') fetchWeeklyDigest('Grade 3', 'A');
                     }}
                     className={`flex-1 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center justify-center space-x-2 ${
                       analyticsTab === tab.key
@@ -2389,6 +2750,102 @@ function App() {
                 </div>
               )}
 
+              {/* SUB-TAB 6: Weekly Summary Digest */}
+              {analyticsTab === 'digest' && (
+                <div className="bg-white/80 backdrop-blur-lg border border-white rounded-3xl p-6 shadow-xl shadow-indigo-100/40 space-y-6">
+                  <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
+                        <Mail className="w-6 h-6 text-indigo-600 animate-bounce" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-bold text-slate-800">✉️ Weekly Summary Digest</h3>
+                        <p className="text-xs text-slate-500">Classroom health status report compiled and emailed to teachers every Monday morning</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Left side: options & settings */}
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4 h-fit">
+                      <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Digest Dispatch Parameters</h4>
+                      
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Grade Select</label>
+                          <select 
+                            value={compareGrade}
+                            onChange={(e) => { setCompareGrade(e.target.value); fetchWeeklyDigest(e.target.value, 'A'); }}
+                            className="w-full px-3 py-2 border border-slate-200 bg-white rounded-xl text-xs focus:ring-2 focus:ring-brand-500 outline-none"
+                          >
+                            {['Grade 1','Grade 2','Grade 3','Grade 4','Grade 5','Grade 6','Grade 7','Grade 8','Grade 9','Grade 10'].map(g => (
+                              <option key={g} value={g}>{g}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Recipient Email</label>
+                          <input 
+                            type="email"
+                            value={teacherEmail}
+                            onChange={(e) => setTeacherEmail(e.target.value)}
+                            placeholder="teacher@school.edu"
+                            className="w-full px-3 py-2 border border-slate-200 bg-white rounded-xl text-xs focus:ring-2 focus:ring-brand-500 outline-none"
+                          />
+                        </div>
+
+                        <button
+                          onClick={handleSendDigestEmail}
+                          disabled={isSendingDigest || !weeklyDigest}
+                          className="w-full py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center justify-center disabled:opacity-50 cursor-pointer"
+                        >
+                          <Mail className="w-4 h-4 mr-2" />
+                          {isSendingDigest ? "Sending..." : "Email Digest Now"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Right side: high-fidelity Preview */}
+                    <div className="lg:col-span-2 bg-slate-900 border border-slate-850 rounded-2xl p-6 text-slate-100 flex flex-col justify-between shadow-xl min-h-[350px]">
+                      {weeklyDigest ? (
+                        <div className="space-y-4">
+                          <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                            <span className="text-[10px] text-brand-400 bg-brand-950/40 border border-brand-900 px-2.5 py-0.5 rounded font-mono font-bold uppercase">
+                              Email Digest Preview
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              {weeklyDigest.report_date}
+                            </span>
+                          </div>
+
+                          <div className="space-y-3 font-mono text-xs">
+                            <div className="flex text-slate-350">
+                              <span className="w-16">Subject:</span>
+                              <span className="text-white font-bold">{weeklyDigest.email_subject}</span>
+                            </div>
+                            <div className="flex text-slate-350">
+                              <span className="w-16">To:</span>
+                              <span className="text-brand-300 font-bold">{teacherEmail}</span>
+                            </div>
+                            <hr className="border-slate-800" />
+                            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800/60 text-slate-300 whitespace-pre-line leading-relaxed max-h-56 overflow-y-auto">
+                              {weeklyDigest.email_body}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="h-full flex flex-col items-center justify-center text-slate-500">
+                          <Mail className="w-12 h-12 text-slate-650 mb-2" />
+                          <p className="text-sm font-bold">Digest preview not generated</p>
+                          <p className="text-xs text-slate-650 mt-1">Select a grade and dispatch parameters to generate class digest.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
             </div>
           )}
 
@@ -2464,6 +2921,187 @@ function App() {
                   className="flex-1 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-600/10 transition-all flex items-center justify-center"
                 >
                   {isSubmittingIntervention ? "Triggering..." : "Launch Intervention"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 3.1. MODAL FOR PARENT ALERTS DISPATCH */}
+      {showParentAlertModal && parentAlertStudent && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-lg w-full p-6 shadow-2xl space-y-4 animate-scale-up">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-emerald-100 text-emerald-700 rounded-xl">
+                  <PhoneCall className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">Parent Alert System</h3>
+                  <p className="text-xs text-slate-400">Trigger WhatsApp/SMS early warnings directly to parents</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowParentAlertModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSendParentAlert} className="space-y-4">
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500 font-medium">Student Name:</span>
+                  <strong className="text-slate-800">{parentAlertStudent.name}</strong>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500 font-medium">Dropout Risk Level:</span>
+                  <strong className={`px-2 py-0.2 rounded text-[10px] font-black uppercase ${
+                    parentAlertStudent.risk_level === 'High' ? 'bg-rose-50 text-rose-700' :
+                    parentAlertStudent.risk_level === 'Medium' ? 'bg-amber-50 text-amber-700' :
+                    'bg-emerald-50 text-emerald-700'
+                  }`}>{parentAlertStudent.risk_level} Risk</strong>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500 font-medium">Attendance Rate:</span>
+                  <strong className="text-slate-800">{parentAlertStudent.attendance_rate}%</strong>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Alert Dispatch Mode</label>
+                <div className="flex space-x-3">
+                  {[
+                    { key: 'WhatsApp', label: '📱 WhatsApp Dispatch', color: 'border-emerald-250 hover:bg-emerald-50 text-emerald-700' },
+                    { key: 'SMS', label: '💬 Cellular SMS Text', color: 'border-blue-250 hover:bg-blue-50 text-blue-700' }
+                  ].map(mode => (
+                    <button
+                      key={mode.key}
+                      type="button"
+                      onClick={() => setParentAlertType(mode.key)}
+                      className={`flex-1 py-3 border rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        parentAlertType === mode.key 
+                          ? 'bg-slate-900 border-slate-900 text-white shadow-md' 
+                          : `bg-white ${mode.color}`
+                      }`}
+                    >
+                      {mode.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex space-x-3 pt-2">
+                <button 
+                  type="button" 
+                  onClick={() => setShowParentAlertModal(false)}
+                  className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  Dismiss
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={isSendingParentAlert}
+                  className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/10 transition-all flex items-center justify-center cursor-pointer"
+                >
+                  {isSendingParentAlert ? "Dispatching..." : "Send Alert"}
+                </button>
+              </div>
+            </form>
+
+            {/* Dispatch Logs */}
+            <div className="border-t border-slate-100 pt-4 space-y-2">
+              <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">History Dispatch Logs</h4>
+              <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
+                {parentAlertLog.length > 0 ? (
+                  parentAlertLog.map(log => (
+                    <div key={log.id} className="p-2.5 rounded-xl border border-slate-100 bg-slate-50 text-[10px] space-y-1">
+                      <div className="flex justify-between items-center font-bold">
+                        <span className="text-slate-700">{log.alert_type} Sent to {log.parent_name}</span>
+                        <span className="text-emerald-600">{log.status}</span>
+                      </div>
+                      <p className="text-slate-500 leading-normal">"{log.message}"</p>
+                      <span className="text-[9px] text-slate-400 font-mono">{new Date(log.timestamp).toLocaleString()}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-4 text-slate-450 text-[10px] italic">
+                    No alerts have been dispatched for this student yet.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3.2. MODAL FOR PRINCIPAL ESCALATION */}
+      {showEscalationModal && escalationStudent && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 shadow-2xl space-y-4 animate-scale-up">
+            <div className="flex items-center space-x-3 border-b border-slate-100 pb-3">
+              <div className="p-2.5 bg-rose-100 text-rose-700 rounded-xl">
+                <ShieldAlert className="w-6 h-6 animate-bounce" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-800">Administrative Escalation</h3>
+                <p className="text-xs text-slate-400">Flag student status directly to the Principal's Urgent Inbox</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleFlagEscalation} className="space-y-4">
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">Student:</span>
+                  <strong className="text-slate-800">{escalationStudent.name}</strong>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">Class Status:</span>
+                  <strong className="text-slate-800">{escalationStudent.grade} • {escalationStudent.section}</strong>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Priority Tier</label>
+                <select 
+                  value={escalationPriority} 
+                  onChange={(e) => setEscalationPriority(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-slate-200 bg-slate-50 rounded-xl text-xs focus:ring-2 focus:ring-rose-500 outline-none"
+                >
+                  <option value="Critical">🚨 Critical Priority (Immediate Actions)</option>
+                  <option value="High">⚠️ High Priority (Normal Review)</option>
+                  <option value="Medium">⚡ Medium Priority (Watchlist alert)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Diagnostic Justification Details</label>
+                <textarea 
+                  rows="3"
+                  required
+                  placeholder="Please supply explicit justification reason for this administrative escalation..."
+                  value={escalationReason}
+                  onChange={(e) => setEscalationReason(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 bg-slate-50 rounded-xl text-xs focus:ring-2 focus:ring-rose-500 outline-none"
+                />
+              </div>
+
+              <div className="flex space-x-3 pt-2">
+                <button 
+                  type="button" 
+                  onClick={() => setShowEscalationModal(false)}
+                  className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  Abort
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={isEscalating}
+                  className="flex-1 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-600/10 transition-all flex items-center justify-center cursor-pointer"
+                >
+                  {isEscalating ? "Flagging..." : "Confirm Escalation"}
                 </button>
               </div>
             </form>

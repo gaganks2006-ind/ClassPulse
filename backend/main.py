@@ -1540,3 +1540,309 @@ def export_report(grade: str = "Grade 3", section: str = "A", format: str = "jso
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
+
+
+# =====================================================================
+# COMMUNICATION & ALERTS ENDPOINTS
+# =====================================================================
+
+@app.post("/api/alerts/parent-alert")
+def send_parent_alert(data: dict):
+    """Parent Alert System - WhatsApp/SMS alert when student enters High Risk"""
+    conn = get_db_connection()
+    try:
+        student_id = data.get("student_id")
+        alert_type = data.get("alert_type", "WhatsApp")
+
+        student = conn.execute("SELECT * FROM students WHERE id = ?", (student_id,)).fetchone()
+        if not student:
+            raise HTTPException(status_code=404, detail="Student not found")
+
+        # Find parent user associated with this student
+        parent = conn.execute(
+            "SELECT * FROM users WHERE role = 'Parent' AND associated_student_id = ?",
+            (student_id,)
+        ).fetchone()
+        parent_name = parent["name"] if parent else "Parent/Guardian"
+
+        message = (
+            f"🚨 CLASSPULSE ALERT: Dear {parent_name}, your child {student['name']} "
+            f"(Roll: {student['roll_number']}) has been flagged as {student['risk_level']} Risk. "
+            f"Current attendance: {student['attendance_rate']}%. "
+            f"Please contact the school for a detailed discussion. "
+            f"— ClassPulse EWS System"
+        )
+
+        conn.execute(
+            "INSERT INTO parent_alerts (student_id, parent_name, alert_type, message, status) VALUES (?, ?, ?, ?, ?)",
+            (student_id, parent_name, alert_type, message, "Sent")
+        )
+
+        # Also create a notification for the teacher
+        conn.execute(
+            "INSERT INTO notifications (student_id, type, title, message) VALUES (?, ?, ?, ?)",
+            (student_id, "parent_alert",
+             f"Parent Alert Sent for {student['name']}",
+             f"{alert_type} alert sent to {parent_name} about {student['name']}'s {student['risk_level']} risk status.")
+        )
+
+        conn.commit()
+        return {
+            "status": "success",
+            "message": f"{alert_type} alert sent to {parent_name}",
+            "alert_preview": message,
+            "delivery_status": "Sent"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.get("/api/alerts/parent-alert-log")
+def get_parent_alert_log(student_id: int = None):
+    """Get parent alert history"""
+    conn = get_db_connection()
+    try:
+        if student_id:
+            rows = conn.execute(
+                "SELECT pa.*, s.name as student_name FROM parent_alerts pa JOIN students s ON pa.student_id = s.id WHERE pa.student_id = ? ORDER BY pa.timestamp DESC",
+                (student_id,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT pa.*, s.name as student_name FROM parent_alerts pa JOIN students s ON pa.student_id = s.id ORDER BY pa.timestamp DESC"
+            ).fetchall()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.get("/api/notifications")
+def get_notifications(unread_only: bool = False):
+    """Teacher Notifications - in-app alerts for risk level changes"""
+    conn = get_db_connection()
+    try:
+        if unread_only:
+            rows = conn.execute(
+                "SELECT n.*, s.name as student_name FROM notifications n LEFT JOIN students s ON n.student_id = s.id WHERE n.is_read = 0 ORDER BY n.timestamp DESC"
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT n.*, s.name as student_name FROM notifications n LEFT JOIN students s ON n.student_id = s.id ORDER BY n.timestamp DESC LIMIT 50"
+            ).fetchall()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.post("/api/notifications/mark-read")
+def mark_notification_read(data: dict):
+    """Mark notification as read"""
+    conn = get_db_connection()
+    try:
+        notification_id = data.get("notification_id")
+        mark_all = data.get("mark_all", False)
+        if mark_all:
+            conn.execute("UPDATE notifications SET is_read = 1 WHERE is_read = 0")
+        elif notification_id:
+            conn.execute("UPDATE notifications SET is_read = 1 WHERE id = ?", (notification_id,))
+        conn.commit()
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.get("/api/notifications/count")
+def get_notification_count():
+    """Get unread notification count"""
+    conn = get_db_connection()
+    try:
+        row = conn.execute("SELECT COUNT(*) as count FROM notifications WHERE is_read = 0").fetchone()
+        return {"unread_count": row["count"]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.get("/api/digest/weekly-summary")
+def get_weekly_summary(grade: str = "Grade 3", section: str = "A"):
+    """Weekly Summary Digest - class health overview for teacher emails"""
+    conn = get_db_connection()
+    try:
+        students = conn.execute(
+            "SELECT id, name, roll_number, attendance_rate, risk_level FROM students WHERE grade = ? AND section = ?",
+            (grade, section)
+        ).fetchall()
+
+        total = len(students)
+        high_risk = [s for s in students if s["risk_level"] == "High"]
+        medium_risk = [s for s in students if s["risk_level"] == "Medium"]
+        low_risk = [s for s in students if s["risk_level"] == "Low"]
+        avg_attendance = round(sum(s["attendance_rate"] for s in students) / total, 1) if total > 0 else 0
+
+        # Recent assessments this week
+        recent_assessments = conn.execute(
+            "SELECT COUNT(*) as cnt FROM assessments a JOIN students s ON a.student_id = s.id WHERE s.grade = ? AND s.section = ? AND a.assessment_date >= date('now', '-7 days')",
+            (grade, section)
+        ).fetchone()
+
+        # Recent interventions
+        recent_interventions = conn.execute(
+            "SELECT COUNT(*) as cnt FROM team_activity WHERE activity_type = 'intervention' AND timestamp >= datetime('now', '-7 days')"
+        ).fetchone()
+
+        summary = {
+            "grade": grade,
+            "section": section,
+            "report_date": datetime.now().strftime("%Y-%m-%d"),
+            "total_students": total,
+            "avg_attendance": avg_attendance,
+            "high_risk_count": len(high_risk),
+            "high_risk_students": [{"name": s["name"], "attendance": s["attendance_rate"]} for s in high_risk],
+            "medium_risk_count": len(medium_risk),
+            "low_risk_count": len(low_risk),
+            "assessments_this_week": recent_assessments["cnt"] if recent_assessments else 0,
+            "interventions_this_week": recent_interventions["cnt"] if recent_interventions else 0,
+            "health_score": round(((len(low_risk) * 100) / total) if total > 0 else 0, 1),
+            "email_subject": f"ClassPulse Weekly Digest — {grade} Section {section} — {datetime.now().strftime('%B %d, %Y')}",
+            "email_body": f"Dear Teacher,\n\nHere is your weekly class health summary for {grade}, Section {section}.\n\n"
+                         f"📊 Total Students: {total}\n"
+                         f"📈 Average Attendance: {avg_attendance}%\n"
+                         f"🔴 High Risk: {len(high_risk)} students\n"
+                         f"🟡 Medium Risk: {len(medium_risk)} students\n"
+                         f"🟢 Low Risk: {len(low_risk)} students\n\n"
+                         f"Please review the ClassPulse dashboard for detailed analytics.\n\n"
+                         f"— ClassPulse AI System"
+        }
+        return summary
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.post("/api/digest/send-email")
+def send_weekly_email(data: dict):
+    """Simulate sending weekly digest email"""
+    conn = get_db_connection()
+    try:
+        recipient = data.get("recipient_email", "teacher@school.edu")
+        grade = data.get("grade", "Grade 3")
+        section = data.get("section", "A")
+
+        # Log it as a notification
+        conn.execute(
+            "INSERT INTO notifications (type, title, message) VALUES (?, ?, ?)",
+            ("digest",
+             f"Weekly Digest Sent — {grade} Section {section}",
+             f"Weekly summary digest emailed to {recipient} for {grade}, Section {section}.")
+        )
+        conn.commit()
+
+        return {
+            "status": "success",
+            "message": f"Weekly digest email sent to {recipient}",
+            "simulated": True,
+            "note": "In production, this would integrate with SendGrid/SMTP for actual email delivery."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.post("/api/escalation/flag")
+def flag_student_escalation(data: dict):
+    """Escalation Workflow - flag a student to the principal"""
+    conn = get_db_connection()
+    try:
+        student_id = data.get("student_id")
+        flagged_by = data.get("flagged_by_user_id", 3)
+        reason = data.get("reason", "Critical risk level requires principal attention")
+        priority = data.get("priority", "High")
+
+        student = conn.execute("SELECT * FROM students WHERE id = ?", (student_id,)).fetchone()
+        if not student:
+            raise HTTPException(status_code=404, detail="Student not found")
+
+        # Check if already escalated and open
+        existing = conn.execute(
+            "SELECT id FROM escalations WHERE student_id = ? AND status = 'Open'",
+            (student_id,)
+        ).fetchone()
+        if existing:
+            return {"status": "already_flagged", "message": f"{student['name']} is already flagged for principal review."}
+
+        conn.execute(
+            "INSERT INTO escalations (student_id, flagged_by_user_id, reason, priority) VALUES (?, ?, ?, ?)",
+            (student_id, flagged_by, reason, priority)
+        )
+
+        # Create notification for principal
+        conn.execute(
+            "INSERT INTO notifications (user_id, student_id, type, title, message) VALUES (?, ?, ?, ?, ?)",
+            (1, student_id, "escalation",
+             f"🚨 ESCALATION: {student['name']} flagged for review",
+             f"{student['name']} (Roll: {student['roll_number']}) has been escalated with {priority} priority. Reason: {reason}")
+        )
+
+        conn.commit()
+        return {
+            "status": "success",
+            "message": f"{student['name']} has been flagged to the principal with {priority} priority."
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.get("/api/escalation/flagged")
+def get_flagged_students(status: str = "Open"):
+    """Get all escalated/flagged students"""
+    conn = get_db_connection()
+    try:
+        rows = conn.execute(
+            "SELECT e.*, s.name as student_name, s.roll_number, s.risk_level, s.attendance_rate, "
+            "u.name as flagged_by_name FROM escalations e "
+            "JOIN students s ON e.student_id = s.id "
+            "JOIN users u ON e.flagged_by_user_id = u.id "
+            "WHERE e.status = ? ORDER BY e.timestamp DESC",
+            (status,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.post("/api/escalation/resolve")
+def resolve_escalation(data: dict):
+    """Resolve an escalation"""
+    conn = get_db_connection()
+    try:
+        escalation_id = data.get("escalation_id")
+        notes = data.get("principal_notes", "")
+        conn.execute(
+            "UPDATE escalations SET status = 'Resolved', principal_notes = ?, resolved_at = datetime('now') WHERE id = ?",
+            (notes, escalation_id)
+        )
+        conn.commit()
+        return {"status": "success", "message": "Escalation resolved."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
