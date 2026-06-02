@@ -81,8 +81,6 @@ function App() {
   const [sortKey, setSortKey] = useState('name');
   const [sortOrder, setSortOrder] = useState('asc');
 
-  // Modal and Interactive Hub States
-  const [showWorksheetModal, setShowWorksheetModal] = useState(false);
   const [showDikshaHub, setShowDikshaHub] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
 
@@ -286,10 +284,10 @@ function App() {
 
   return (
     <>
-      <div className={`flex h-screen bg-slate-50 overflow-hidden text-slate-800 ${showWorksheetModal ? 'no-print' : ''}`}>
+      <div className={`flex h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 overflow-hidden text-slate-800 ${showWorksheetModal ? 'no-print' : ''}`}>
       
       {/* 1. Sidebar Navigation */}
-      <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col justify-between shadow-xl">
+      <aside className="w-64 bg-indigo-950/90 backdrop-blur-2xl text-slate-300 flex flex-col justify-between shadow-2xl border-r border-indigo-900/50 print:hidden z-20">
         <div>
           {/* Logo */}
           <div className="p-6 flex items-center space-x-3 bg-slate-950">
@@ -404,10 +402,10 @@ function App() {
       </aside>
 
       {/* 2. Main Content Area */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden relative">
         
         {/* Top Header */}
-        <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shadow-sm z-10">
+        <header className="h-16 bg-white/70 backdrop-blur-xl border-b border-indigo-100/50 px-8 flex items-center justify-between shadow-[0_4px_30px_rgba(0,0,0,0.03)] z-10 sticky top-0">
           <div className="flex items-center space-x-3">
             <h2 className="text-lg font-bold text-slate-800 capitalize flex items-center">
               {activeTab === 'dashboard' && "Unified Analytics & Dropout Early Warning"}
@@ -436,14 +434,14 @@ function App() {
         </header>
 
         {/* Tab Contents */}
-        <div className="flex-1 overflow-y-auto p-8 bg-slate-50">
+        <div className="flex-1 overflow-y-auto p-8 relative z-0">
           
           {/* TAB 1: CLASS ANALYTICS & EWS RADAR */}
           {activeTab === 'dashboard' && (
             <div className="space-y-6">
               
               {/* EWS Dropout Risk Monitor Panel */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+              <div className="bg-white/80 backdrop-blur-lg border border-white rounded-3xl p-6 shadow-xl shadow-indigo-100/40">
                 <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
                   <div className="flex items-center space-x-2.5">
                     <ShieldAlert className="w-5 h-5 text-brand-600" />
@@ -470,10 +468,10 @@ function App() {
                   {students.filter(s => s.risk_level === 'High' || s.risk_level === 'Medium').map(student => (
                     <div 
                       key={student.id} 
-                      className={`p-4 rounded-xl border flex flex-col justify-between ${
+                      className={`p-5 rounded-2xl border flex flex-col justify-between hover:-translate-y-1 hover:shadow-xl transition-all duration-300 ${
                         student.risk_level === 'High' 
-                          ? 'bg-rose-50/40 border-rose-100' 
-                          : 'bg-amber-50/40 border-amber-100'
+                          ? 'bg-rose-50/70 border-rose-100 shadow-rose-100/50' 
+                          : 'bg-amber-50/70 border-amber-100 shadow-amber-100/50'
                       }`}
                     >
                       <div>
@@ -526,7 +524,7 @@ function App() {
               
               {/* Classroom Stats & Analytics */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                <div className="bg-white/80 backdrop-blur-lg border border-white rounded-3xl p-6 shadow-xl shadow-indigo-100/40 hover:-translate-y-1 transition-all duration-300">
                   <div className="flex justify-between items-center mb-6">
                     <div>
                       <h3 className="text-base font-bold text-slate-800">Foundational Concept Mastery Map</h3>
@@ -557,7 +555,7 @@ function App() {
                   </div>
                 </div>
 
-                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                <div className="bg-white/80 backdrop-blur-lg border border-white rounded-3xl p-6 shadow-xl shadow-indigo-100/40 hover:-translate-y-1 transition-all duration-300">
                   <h3 className="text-base font-bold text-slate-800 mb-4 flex items-center">
                     <Activity className="w-5 h-5 text-brand-600 mr-2" />
                     Shared Workspace Feed (EWS & Scan Audits)
@@ -601,7 +599,7 @@ function App() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               
               {/* Left Column: Student Selector List */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+              <div className="bg-white/80 backdrop-blur-lg border border-white rounded-3xl p-6 shadow-xl shadow-indigo-100/40 space-y-4">
                 <h3 className="text-base font-bold text-slate-800 mb-2">Class Portfolio Registry</h3>
                 <div className="space-y-2">
                   {students.map((student) => (
@@ -646,7 +644,7 @@ function App() {
                 {studentDetail ? (
                   <>
                     {/* Header info */}
-                    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center">
+                    <div className="bg-white/80 backdrop-blur-lg border border-white rounded-3xl p-6 shadow-xl shadow-indigo-100/40 flex flex-col md:flex-row justify-between items-start md:items-center">
                       <div>
                         <div className="flex items-center space-x-2">
                           <span className="text-[10px] uppercase font-bold text-brand-600 bg-brand-50 border border-brand-100 px-2 py-0.5 rounded tracking-wide">
@@ -687,7 +685,7 @@ function App() {
                     </div>
 
                     {/* Diagnosed gaps and conceptual feedback */}
-                    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                    <div className="bg-white/80 backdrop-blur-lg border border-white rounded-3xl p-6 shadow-xl shadow-indigo-100/40">
                       <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center">
                         <Award className="w-4.5 h-4.5 text-brand-600 mr-2" />
                         Diagnosed Learning Gaps (Multimodal AI)
@@ -753,7 +751,7 @@ function App() {
                     </div>
 
                     {/* DIKSHA Learning Hub Section */}
-                    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                    <div className="bg-white/80 backdrop-blur-lg border border-white rounded-3xl p-6 shadow-xl shadow-indigo-100/40">
                       <div className="flex justify-between items-center mb-4">
                         <div className="flex items-center space-x-2">
                           <span className="text-[10px] uppercase font-bold text-brand-600 bg-brand-50 border border-brand-100 px-2 py-0.5 rounded tracking-wide">
@@ -811,7 +809,7 @@ function App() {
                     </div>
 
                     {/* Shared Diagnostic Log & Peer Collaborative Discussion */}
-                    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                    <div className="bg-white/80 backdrop-blur-lg border border-white rounded-3xl p-6 shadow-xl shadow-indigo-100/40">
                       <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center">
                         <MessageSquare className="w-4.5 h-4.5 text-brand-600 mr-2" />
                         Teacher Diagnostic Notes & Collaboration Hub
