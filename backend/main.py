@@ -1310,3 +1310,233 @@ def get_ews_report(summary: bool = False):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
+
+
+# =====================================================================
+# ANALYTICS & REPORTING ENDPOINTS
+# =====================================================================
+
+import io
+import csv
+from fastapi.responses import StreamingResponse
+
+@app.get("/api/analytics/progress-trends")
+def get_progress_trends(student_id: int = None):
+    """Student Progress Trend Charts - mastery scores over time"""
+    conn = get_db_connection()
+    try:
+        if student_id:
+            rows = conn.execute(
+                "SELECT a.id as assessment_id, a.assessment_date as date, a.subject, a.total_score as score "
+                "FROM assessments a WHERE a.student_id = ? ORDER BY a.assessment_date ASC",
+                (student_id,)
+            ).fetchall()
+            return [dict(r) for r in rows]
+        else:
+            rows = conn.execute(
+                "SELECT a.student_id, s.name as student_name, a.id as assessment_id, "
+                "a.assessment_date as date, a.subject, a.total_score as score "
+                "FROM assessments a JOIN students s ON a.student_id = s.id "
+                "ORDER BY a.student_id, a.assessment_date ASC"
+            ).fetchall()
+            return [dict(r) for r in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.get("/api/analytics/heatmap")
+def get_class_heatmap(grade: str = "Grade 3", section: str = "A"):
+    """Class-wide Risk Heatmap - visual grid of student risk levels"""
+    conn = get_db_connection()
+    try:
+        students = conn.execute(
+            "SELECT id, name, roll_number, risk_level, attendance_rate FROM students WHERE grade = ? AND section = ?",
+            (grade, section)
+        ).fetchall()
+        result = []
+        for s in students:
+            avg_score_row = conn.execute(
+                "SELECT AVG(total_score) as avg_score FROM assessments WHERE student_id = ?",
+                (s["id"],)
+            ).fetchone()
+            avg_score = round(avg_score_row["avg_score"], 1) if avg_score_row and avg_score_row["avg_score"] else 0.0
+
+            gap_count_row = conn.execute(
+                "SELECT COUNT(*) as cnt FROM learning_gaps WHERE student_id = ?",
+                (s["id"],)
+            ).fetchone()
+            gap_count = gap_count_row["cnt"] if gap_count_row else 0
+
+            critical_gap_row = conn.execute(
+                "SELECT COUNT(*) as cnt FROM learning_gaps WHERE student_id = ? AND status = 'Critical Gap'",
+                (s["id"],)
+            ).fetchone()
+            critical_gap_count = critical_gap_row["cnt"] if critical_gap_row else 0
+
+            result.append({
+                "student_id": s["id"],
+                "name": s["name"],
+                "roll_number": s["roll_number"],
+                "risk_level": s["risk_level"],
+                "attendance_rate": s["attendance_rate"],
+                "avg_score": avg_score,
+                "gap_count": gap_count,
+                "critical_gap_count": critical_gap_count
+            })
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.get("/api/analytics/attendance-ews")
+def get_attendance_ews(grade: str = "Grade 3", section: str = "A"):
+    """Attendance to EWS Integration - daily attendance fed into dropout radar"""
+    conn = get_db_connection()
+    try:
+        students = conn.execute(
+            "SELECT id, name, roll_number, risk_level, attendance_rate FROM students WHERE grade = ? AND section = ?",
+            (grade, section)
+        ).fetchall()
+        result = []
+        for s in students:
+            records = conn.execute(
+                "SELECT date, status FROM attendance_records WHERE student_id = ? ORDER BY date ASC",
+                (s["id"],)
+            ).fetchall()
+            attendance_trend = [{"date": r["date"], "status": r["status"]} for r in records]
+            total_present = sum(1 for r in records if r["status"] == "Present")
+            total_absent = sum(1 for r in records if r["status"] == "Absent")
+            absent_dates = [r["date"] for r in records if r["status"] == "Absent"]
+
+            result.append({
+                "student_id": s["id"],
+                "name": s["name"],
+                "attendance_rate": s["attendance_rate"],
+                "risk_level": s["risk_level"],
+                "absent_dates": absent_dates,
+                "total_present": total_present,
+                "total_absent": total_absent,
+                "attendance_trend": attendance_trend
+            })
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.get("/api/analytics/compare-sections")
+def compare_sections(grade: str = "Grade 3"):
+    """Comparative Analytics - section A vs B performance side by side"""
+    conn = get_db_connection()
+    try:
+        sections = conn.execute(
+            "SELECT DISTINCT section FROM students WHERE grade = ? ORDER BY section",
+            (grade,)
+        ).fetchall()
+        result = []
+        for sec in sections:
+            section = sec["section"]
+            students = conn.execute(
+                "SELECT id, attendance_rate, risk_level FROM students WHERE grade = ? AND section = ?",
+                (grade, section)
+            ).fetchall()
+            student_count = len(students)
+            if student_count == 0:
+                continue
+            avg_attendance = round(sum(s["attendance_rate"] for s in students) / student_count, 1)
+            high_risk = sum(1 for s in students if s["risk_level"] == "High")
+            medium_risk = sum(1 for s in students if s["risk_level"] == "Medium")
+            low_risk = sum(1 for s in students if s["risk_level"] == "Low")
+
+            total_score_sum = 0
+            total_score_count = 0
+            for s in students:
+                scores = conn.execute(
+                    "SELECT total_score FROM assessments WHERE student_id = ?",
+                    (s["id"],)
+                ).fetchall()
+                for sc in scores:
+                    total_score_sum += sc["total_score"]
+                    total_score_count += 1
+            avg_score = round(total_score_sum / total_score_count, 1) if total_score_count > 0 else 0.0
+
+            result.append({
+                "section": section,
+                "student_count": student_count,
+                "avg_attendance": avg_attendance,
+                "avg_score": avg_score,
+                "high_risk_count": high_risk,
+                "medium_risk_count": medium_risk,
+                "low_risk_count": low_risk
+            })
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.get("/api/reports/export")
+def export_report(grade: str = "Grade 3", section: str = "A", format: str = "json"):
+    """PDF/Excel Report Export - one-click export of class reports"""
+    conn = get_db_connection()
+    try:
+        students = conn.execute(
+            "SELECT id, name, roll_number, grade, section, attendance_rate, risk_level FROM students WHERE grade = ? AND section = ?",
+            (grade, section)
+        ).fetchall()
+        report_data = []
+        for s in students:
+            avg_score_row = conn.execute(
+                "SELECT AVG(total_score) as avg_score FROM assessments WHERE student_id = ?",
+                (s["id"],)
+            ).fetchone()
+            avg_score = round(avg_score_row["avg_score"], 1) if avg_score_row and avg_score_row["avg_score"] else 0.0
+
+            critical_gap_row = conn.execute(
+                "SELECT COUNT(*) as cnt FROM learning_gaps WHERE student_id = ? AND status = 'Critical Gap'",
+                (s["id"],)
+            ).fetchone()
+            critical_gaps = critical_gap_row["cnt"] if critical_gap_row else 0
+
+            recent_scores_rows = conn.execute(
+                "SELECT total_score FROM assessments WHERE student_id = ? ORDER BY assessment_date DESC LIMIT 3",
+                (s["id"],)
+            ).fetchall()
+            recent_scores = ", ".join([str(r["total_score"]) for r in recent_scores_rows]) if recent_scores_rows else "N/A"
+
+            report_data.append({
+                "Name": s["name"],
+                "Roll Number": s["roll_number"],
+                "Grade": s["grade"],
+                "Section": s["section"],
+                "Attendance Rate": s["attendance_rate"],
+                "Risk Level": s["risk_level"],
+                "Avg Score": avg_score,
+                "Critical Gaps": critical_gaps,
+                "Recent Scores": recent_scores
+            })
+
+        if format == "csv":
+            output = io.StringIO()
+            if report_data:
+                writer = csv.DictWriter(output, fieldnames=report_data[0].keys())
+                writer.writeheader()
+                writer.writerows(report_data)
+            output.seek(0)
+            return StreamingResponse(
+                iter([output.getvalue()]),
+                media_type="text/csv",
+                headers={"Content-Disposition": f"attachment; filename=ClassPulse_Report_{grade.replace(' ', '_')}_{section}.csv"}
+            )
+        else:
+            return report_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()

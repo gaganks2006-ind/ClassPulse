@@ -22,7 +22,11 @@ import {
   Home,
   UserCheck,
   ClipboardList,
-  Printer
+  Printer,
+  Download,
+  Grid3X3,
+  BarChart3,
+  FileSpreadsheet
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -32,7 +36,9 @@ import {
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer,
-  Legend 
+  Legend,
+  AreaChart,
+  Area
 } from 'recharts';
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000/api";
@@ -141,6 +147,16 @@ function App() {
   const [voiceTranscription, setVoiceTranscription] = useState("");
   const [voiceDiagnostic, setVoiceDiagnostic] = useState(null);
   const [isVoiceAnalyzing, setIsVoiceAnalyzing] = useState(false);
+
+  // Analytics & Reporting States
+  const [analyticsTab, setAnalyticsTab] = useState('trends');
+  const [progressTrends, setProgressTrends] = useState([]);
+  const [heatmapData, setHeatmapData] = useState([]);
+  const [attendanceEws, setAttendanceEws] = useState([]);
+  const [compareSections, setCompareSections] = useState([]);
+  const [selectedTrendStudent, setSelectedTrendStudent] = useState('');
+  const [compareGrade, setCompareGrade] = useState('Grade 3');
+  const [isExporting, setIsExporting] = useState(false);
 
 
   useEffect(() => {
@@ -472,6 +488,66 @@ function App() {
     }
   };
 
+  // Analytics & Reporting Fetch Functions
+  const fetchProgressTrends = async (studentId = '') => {
+    try {
+      const url = studentId ? `${API_BASE}/analytics/progress-trends?student_id=${studentId}` : `${API_BASE}/analytics/progress-trends`;
+      const res = await fetch(url);
+      const data = await res.json();
+      setProgressTrends(data);
+    } catch (e) { console.error('Failed to fetch progress trends', e); }
+  };
+
+  const fetchHeatmapData = async (grade = 'Grade 3', section = 'A') => {
+    try {
+      const res = await fetch(`${API_BASE}/analytics/heatmap?grade=${encodeURIComponent(grade)}&section=${section}`);
+      const data = await res.json();
+      setHeatmapData(data);
+    } catch (e) { console.error('Failed to fetch heatmap data', e); }
+  };
+
+  const fetchAttendanceEws = async (grade = 'Grade 3', section = 'A') => {
+    try {
+      const res = await fetch(`${API_BASE}/analytics/attendance-ews?grade=${encodeURIComponent(grade)}&section=${section}`);
+      const data = await res.json();
+      setAttendanceEws(data);
+    } catch (e) { console.error('Failed to fetch attendance EWS', e); }
+  };
+
+  const fetchCompareSections = async (grade = 'Grade 3') => {
+    try {
+      const res = await fetch(`${API_BASE}/analytics/compare-sections?grade=${encodeURIComponent(grade)}`);
+      const data = await res.json();
+      setCompareSections(data);
+    } catch (e) { console.error('Failed to fetch compare sections', e); }
+  };
+
+  const handleExportReport = async (format = 'csv') => {
+    setIsExporting(true);
+    try {
+      const res = await fetch(`${API_BASE}/reports/export?grade=${encodeURIComponent(compareGrade)}&format=${format}`);
+      if (format === 'csv') {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ClassPulse_Report_${compareGrade.replace(' ', '_')}.csv`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      } else {
+        const data = await res.json();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ClassPulse_Report_${compareGrade.replace(' ', '_')}.json`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (e) { console.error('Export failed', e); alert('Export failed. Check backend connection.'); }
+    finally { setIsExporting(false); }
+  };
+
 
   return (
     <>
@@ -531,6 +607,15 @@ function App() {
                 <span>Principal Report</span>
               </button>
             )}
+            <button 
+              onClick={() => { setActiveTab('analytics'); fetchProgressTrends(); fetchHeatmapData(); fetchAttendanceEws(); fetchCompareSections(); }}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'analytics' ? 'bg-brand-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <BarChart3 className="w-5 h-5" />
+              <span>Analytics Hub</span>
+            </button>
           </nav>
         </div>
 
@@ -603,6 +688,7 @@ function App() {
               {activeTab === 'students' && "Diagnostic Student Portfolios"}
               {activeTab === 'scanner' && "ClassPulse Multimodal Scanner"}
               {activeTab === 'report' && "School Risk Report — Principal View"}
+              {activeTab === 'analytics' && "Analytics & Reporting Hub"}
             </h2>
             <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-600 flex items-center border border-slate-200">
               Grade 3 • Section A
@@ -1951,6 +2037,358 @@ function App() {
                   </table>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* TAB 5: ANALYTICS & REPORTING HUB */}
+          {activeTab === 'analytics' && (
+            <div className="space-y-6">
+              {/* Sub-Tab Navigation */}
+              <div className="bg-white/80 backdrop-blur-lg border border-white rounded-3xl p-2 shadow-xl shadow-indigo-100/40 flex space-x-1">
+                {[
+                  { key: 'trends', label: 'Progress Trends', icon: '📈' },
+                  { key: 'heatmap', label: 'Risk Heatmap', icon: '🗺️' },
+                  { key: 'attendance-ews', label: 'Attendance → EWS', icon: '📋' },
+                  { key: 'compare', label: 'Compare Sections', icon: '⚖️' },
+                  { key: 'export', label: 'Export Reports', icon: '📥' }
+                ].map(tab => (
+                  <button
+                    key={tab.key}
+                    onClick={() => {
+                      setAnalyticsTab(tab.key);
+                      if (tab.key === 'trends') fetchProgressTrends(selectedTrendStudent);
+                      if (tab.key === 'heatmap') fetchHeatmapData();
+                      if (tab.key === 'attendance-ews') fetchAttendanceEws();
+                      if (tab.key === 'compare') fetchCompareSections(compareGrade);
+                    }}
+                    className={`flex-1 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center justify-center space-x-2 ${
+                      analyticsTab === tab.key
+                        ? 'bg-brand-600 text-white shadow-md'
+                        : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+                    }`}
+                  >
+                    <span>{tab.icon}</span>
+                    <span>{tab.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* SUB-TAB 1: Student Progress Trend Charts */}
+              {analyticsTab === 'trends' && (
+                <div className="bg-white/80 backdrop-blur-lg border border-white rounded-3xl p-6 shadow-xl shadow-indigo-100/40">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="text-base font-bold text-slate-800">📈 Student Progress Trend Charts</h3>
+                      <p className="text-xs text-slate-500">Mastery score over weeks/months — not just snapshots</p>
+                    </div>
+                    <select
+                      value={selectedTrendStudent}
+                      onChange={(e) => { setSelectedTrendStudent(e.target.value); fetchProgressTrends(e.target.value); }}
+                      className="px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                    >
+                      <option value="">All Students</option>
+                      {students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.roll_number})</option>)}
+                    </select>
+                  </div>
+
+                  <div className="h-80">
+                    {progressTrends.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={progressTrends} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
+                          <defs>
+                            <linearGradient id="scoreGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                              <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                          <YAxis domain={[0, 10]} tick={{ fontSize: 10 }} />
+                          <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '11px' }} />
+                          <Area type="monotone" dataKey="score" stroke="#6366f1" strokeWidth={2.5} fill="url(#scoreGradient)" dot={{ r: 4, fill: '#6366f1' }} activeDot={{ r: 6 }} />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-full flex flex-col items-center justify-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                        <TrendingUp className="w-12 h-12 text-slate-300 mb-2" />
+                        <p className="text-sm">No assessment history available yet. Scan papers to build trend data.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* SUB-TAB 2: Class-wide Risk Heatmap */}
+              {analyticsTab === 'heatmap' && (
+                <div className="bg-white/80 backdrop-blur-lg border border-white rounded-3xl p-6 shadow-xl shadow-indigo-100/40">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="text-base font-bold text-slate-800">🗺️ Class-wide Risk Heatmap</h3>
+                      <p className="text-xs text-slate-500">Visual grid showing every student's risk level at a glance</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                    {heatmapData.map(student => {
+                      const riskColors = {
+                        'High': 'from-rose-500 to-rose-600 text-white shadow-rose-200',
+                        'Medium': 'from-amber-400 to-amber-500 text-white shadow-amber-200',
+                        'Low': 'from-emerald-400 to-emerald-500 text-white shadow-emerald-200'
+                      };
+                      return (
+                        <div
+                          key={student.student_id}
+                          className={`bg-gradient-to-br ${riskColors[student.risk_level] || riskColors['Low']} rounded-2xl p-4 shadow-lg hover:scale-105 transition-all duration-300 cursor-pointer`}
+                          onClick={() => { const s = students.find(st => st.id === student.student_id); if (s) { setSelectedStudent(s); setActiveTab('students'); } }}
+                        >
+                          <h4 className="text-sm font-bold truncate">{student.name}</h4>
+                          <p className="text-[10px] opacity-80 font-mono">{student.roll_number}</p>
+                          <div className="mt-3 space-y-1">
+                            <div className="flex justify-between text-[10px]">
+                              <span className="opacity-80">Attendance</span>
+                              <span className="font-bold">{student.attendance_rate}%</span>
+                            </div>
+                            <div className="flex justify-between text-[10px]">
+                              <span className="opacity-80">Avg Score</span>
+                              <span className="font-bold">{student.avg_score}/10</span>
+                            </div>
+                            <div className="flex justify-between text-[10px]">
+                              <span className="opacity-80">Critical Gaps</span>
+                              <span className="font-bold">{student.critical_gap_count}</span>
+                            </div>
+                          </div>
+                          <div className="mt-2 text-[9px] font-black uppercase tracking-wider text-center opacity-90 bg-white/20 rounded-lg py-1">
+                            {student.risk_level} Risk
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {heatmapData.length === 0 && (
+                      <div className="col-span-full text-center py-12 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                        <Grid3X3 className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                        <p className="text-sm">No heatmap data available. Ensure students are enrolled.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* SUB-TAB 3: Attendance → EWS Integration */}
+              {analyticsTab === 'attendance-ews' && (
+                <div className="bg-white/80 backdrop-blur-lg border border-white rounded-3xl p-6 shadow-xl shadow-indigo-100/40">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="text-base font-bold text-slate-800">📋 Attendance → EWS Integration</h3>
+                      <p className="text-xs text-slate-500">Daily attendance fed directly into the dropout radar</p>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200">
+                          <th className="text-left p-3 font-bold text-slate-600 rounded-tl-xl">Student</th>
+                          <th className="text-center p-3 font-bold text-slate-600">Attendance</th>
+                          <th className="text-center p-3 font-bold text-slate-600">Present</th>
+                          <th className="text-center p-3 font-bold text-slate-600">Absent</th>
+                          <th className="text-center p-3 font-bold text-slate-600">Risk Level</th>
+                          <th className="text-center p-3 font-bold text-slate-600 rounded-tr-xl">Timeline</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {attendanceEws.map(student => (
+                          <tr key={student.student_id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="p-3">
+                              <div className="font-bold text-slate-800">{student.name}</div>
+                            </td>
+                            <td className="p-3 text-center">
+                              <div className="inline-flex items-center">
+                                <div className="w-16 h-2 bg-slate-200 rounded-full overflow-hidden mr-2">
+                                  <div
+                                    className={`h-full rounded-full transition-all ${
+                                      student.attendance_rate >= 90 ? 'bg-emerald-500' :
+                                      student.attendance_rate >= 75 ? 'bg-amber-500' : 'bg-rose-500'
+                                    }`}
+                                    style={{ width: `${student.attendance_rate}%` }}
+                                  />
+                                </div>
+                                <span className="font-bold text-slate-700">{student.attendance_rate}%</span>
+                              </div>
+                            </td>
+                            <td className="p-3 text-center font-bold text-emerald-600">{student.total_present}</td>
+                            <td className="p-3 text-center font-bold text-rose-600">{student.total_absent}</td>
+                            <td className="p-3 text-center">
+                              <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border ${
+                                student.risk_level === 'High' ? 'bg-rose-50 border-rose-200 text-rose-700' :
+                                student.risk_level === 'Medium' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                                'bg-emerald-50 border-emerald-200 text-emerald-700'
+                              }`}>
+                                {student.risk_level}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <div className="flex space-x-0.5 justify-center">
+                                {(student.attendance_trend || []).slice(-10).map((day, i) => (
+                                  <div
+                                    key={i}
+                                    className={`w-4 h-4 rounded-sm text-[7px] flex items-center justify-center font-bold ${
+                                      day.status === 'Present' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                                    }`}
+                                    title={`${day.date}: ${day.status}`}
+                                  >
+                                    {day.status === 'Present' ? '✓' : '✗'}
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {attendanceEws.length === 0 && (
+                      <div className="text-center py-12 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200 mt-4">
+                        <Calendar className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                        <p className="text-sm">No attendance-EWS data available.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* SUB-TAB 4: Comparative Analytics */}
+              {analyticsTab === 'compare' && (
+                <div className="bg-white/80 backdrop-blur-lg border border-white rounded-3xl p-6 shadow-xl shadow-indigo-100/40">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="text-base font-bold text-slate-800">⚖️ Comparative Analytics</h3>
+                      <p className="text-xs text-slate-500">Section A vs Section B performance side by side</p>
+                    </div>
+                    <select
+                      value={compareGrade}
+                      onChange={(e) => { setCompareGrade(e.target.value); fetchCompareSections(e.target.value); }}
+                      className="px-3 py-2 rounded-xl border border-slate-200 text-xs bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                    >
+                      {['Grade 1','Grade 2','Grade 3','Grade 4','Grade 5','Grade 6','Grade 7','Grade 8','Grade 9','Grade 10'].map(g => (
+                        <option key={g} value={g}>{g}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {compareSections.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {compareSections.map(sec => (
+                        <div key={sec.section} className="bg-gradient-to-br from-slate-50 to-indigo-50 rounded-2xl p-5 border border-slate-100 hover:-translate-y-1 hover:shadow-xl transition-all duration-300">
+                          <div className="flex items-center justify-between mb-4">
+                            <h4 className="text-lg font-black text-slate-800">Section {sec.section}</h4>
+                            <span className="text-[10px] font-bold px-2.5 py-1 bg-brand-50 border border-brand-100 text-brand-700 rounded-full">
+                              {sec.student_count} Students
+                            </span>
+                          </div>
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs text-slate-500">Avg Attendance</span>
+                              <span className="text-sm font-bold text-slate-800">{sec.avg_attendance}%</span>
+                            </div>
+                            <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full ${sec.avg_attendance >= 90 ? 'bg-emerald-500' : sec.avg_attendance >= 75 ? 'bg-amber-500' : 'bg-rose-500'}`} style={{ width: `${sec.avg_attendance}%` }} />
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs text-slate-500">Avg Score</span>
+                              <span className="text-sm font-bold text-slate-800">{sec.avg_score}/10</span>
+                            </div>
+                            <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                              <div className="h-full bg-brand-500 rounded-full" style={{ width: `${(sec.avg_score / 10) * 100}%` }} />
+                            </div>
+                            <div className="flex space-x-2 mt-2">
+                              <span className="flex-1 text-center text-[10px] font-bold py-1.5 rounded-lg bg-rose-50 border border-rose-100 text-rose-700">High: {sec.high_risk_count}</span>
+                              <span className="flex-1 text-center text-[10px] font-bold py-1.5 rounded-lg bg-amber-50 border border-amber-100 text-amber-700">Med: {sec.medium_risk_count}</span>
+                              <span className="flex-1 text-center text-[10px] font-bold py-1.5 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-700">Low: {sec.low_risk_count}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                      <BarChart3 className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                      <p className="text-sm">Select a grade to compare section performance.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* SUB-TAB 5: Export Reports */}
+              {analyticsTab === 'export' && (
+                <div className="bg-white/80 backdrop-blur-lg border border-white rounded-3xl p-6 shadow-xl shadow-indigo-100/40">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="text-base font-bold text-slate-800">📥 PDF/Excel Report Export</h3>
+                      <p className="text-xs text-slate-500">One-click export of student or class reports for admin meetings</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl p-6 border border-emerald-100">
+                      <div className="flex items-center space-x-3 mb-4">
+                        <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+                          <FileSpreadsheet className="w-6 h-6 text-emerald-600" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-800">CSV Spreadsheet Export</h4>
+                          <p className="text-[10px] text-slate-500">Compatible with Excel, Google Sheets, LibreOffice</p>
+                        </div>
+                      </div>
+                      <select
+                        value={compareGrade}
+                        onChange={(e) => setCompareGrade(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-emerald-200 text-xs bg-white mb-3 focus:ring-2 focus:ring-emerald-500 outline-none"
+                      >
+                        {['Grade 1','Grade 2','Grade 3','Grade 4','Grade 5','Grade 6','Grade 7','Grade 8','Grade 9','Grade 10'].map(g => (
+                          <option key={g} value={g}>{g}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => handleExportReport('csv')}
+                        disabled={isExporting}
+                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center justify-center disabled:opacity-50"
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        {isExporting ? 'Exporting...' : 'Download CSV Report'}
+                      </button>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-brand-50 to-indigo-50 rounded-2xl p-6 border border-brand-100">
+                      <div className="flex items-center space-x-3 mb-4">
+                        <div className="w-12 h-12 bg-brand-100 rounded-xl flex items-center justify-center">
+                          <Download className="w-6 h-6 text-brand-600" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-800">JSON Data Export</h4>
+                          <p className="text-[10px] text-slate-500">Structured data for integrations and dashboards</p>
+                        </div>
+                      </div>
+                      <select
+                        value={compareGrade}
+                        onChange={(e) => setCompareGrade(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-brand-200 text-xs bg-white mb-3 focus:ring-2 focus:ring-brand-500 outline-none"
+                      >
+                        {['Grade 1','Grade 2','Grade 3','Grade 4','Grade 5','Grade 6','Grade 7','Grade 8','Grade 9','Grade 10'].map(g => (
+                          <option key={g} value={g}>{g}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => handleExportReport('json')}
+                        disabled={isExporting}
+                        className="w-full py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center justify-center disabled:opacity-50"
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        {isExporting ? 'Exporting...' : 'Download JSON Report'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
             </div>
           )}
 
